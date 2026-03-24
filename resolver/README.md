@@ -36,6 +36,10 @@ The agent answers "what is running right now?". The resolver answers "is a newer
 - subscribes to `up2date/nodes/+/snapshot`
 - publishes to `up2date/nodes/<node>/checks/<service>`
 
+Related contract:
+
+- [schemas/service-check.schema.json](/Users/alex/Workspace/up2date/schemas/service-check.schema.json)
+
 ## Local Dry Run
 
 ```bash
@@ -46,68 +50,44 @@ UP2DATE_REGISTRY_FIXTURE_PATH=resolver/fixtures/registry_tags.json \
 python3 resolver/app/up2date_resolver.py
 ```
 
-## Compose Run
+## Compose Runs
 
-From the repository root:
+For the local end-to-end demo stack:
 
 ```bash
-podman compose -f examples/compose.yaml up
+podman compose -f examples/compose.yaml up --build
 ```
 
-If you want to build the local resolver code instead of pulling the published image, switch the commented `build:` block back on in [examples/compose.yaml](/Users/alex/Workspace/up2date/examples/compose.yaml).
+For a standalone resolver deployment that connects to an existing broker:
 
-## Published Image
+```bash
+podman compose -f examples/resolver.compose.yaml up --build
+```
 
-Planned Docker Hub image name:
+The resolver-only example is intentionally separate so deployment-oriented settings do not clutter the local demo stack.
 
-- `docker.io/ch4rl3x/up2date-resolver`
+## Container Image Notes
 
-Suggested first alpha tag:
+If you later publish a project-owned image, prefer a neutral path such as:
 
-- `docker.io/ch4rl3x/up2date-resolver:0.1.0-alpha.1`
+- `ghcr.io/your-org/up2date-resolver`
 
-Build an `amd64` image for your Linux hosts:
+Example local build command with OCI metadata:
 
 ```bash
 podman build \
-  --platform linux/amd64 \
   --build-arg VERSION=0.1.0-alpha.1 \
-  -t docker.io/ch4rl3x/up2date-resolver:0.1.0-alpha.1 \
+  --build-arg VCS_REF="$(git rev-parse --short HEAD)" \
+  --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -t ghcr.io/your-org/up2date-resolver:0.1.0-alpha.1 \
   resolver
 ```
 
-Push it to Docker Hub:
-
-```bash
-podman push docker.io/ch4rl3x/up2date-resolver:0.1.0-alpha.1
-```
-
-Optional moving alpha tag:
-
-```bash
-podman tag docker.io/ch4rl3x/up2date-resolver:0.1.0-alpha.1 docker.io/ch4rl3x/up2date-resolver:alpha
-podman push docker.io/ch4rl3x/up2date-resolver:alpha
-```
-
-If you build on Apple Silicon and deploy to `amd64` Linux hosts, keep using `--platform linux/amd64` until we publish a proper multi-arch manifest.
-
-## Deploy With A Published Image
-
-```yaml
-services:
-  up2date-resolver:
-    image: docker.io/ch4rl3x/up2date-resolver:0.1.0-alpha.1
-    environment:
-      UP2DATE_MQTT_HOST: mqtt.example.internal
-      UP2DATE_MQTT_PORT: 1883
-      UP2DATE_MQTT_USERNAME: change-me
-      UP2DATE_MQTT_PASSWORD: change-me
-      UP2DATE_RETAIN_MESSAGES: "true"
-    restart: unless-stopped
-```
+If you build on Apple Silicon and deploy to `amd64` Linux hosts, keep using `--platform linux/amd64` until you publish a proper multi-arch manifest.
 
 ## Test Run
 
 ```bash
 python3 -m unittest discover -s resolver/tests -v
+python3 -m unittest discover -s tests -v
 ```

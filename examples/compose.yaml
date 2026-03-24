@@ -1,43 +1,46 @@
 services:
-#  app:
-#    image: docker.io/library/nginx:1.27-alpine
-#    restart: unless-stopped
+  app:
+    image: docker.io/library/nginx:1.27-alpine
+    restart: unless-stopped
 
-#  mqtt:
-#    image: eclipse-mosquitto:2
-#    ports:
-#      - "1883:1883"
-#    restart: unless-stopped
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
 
-#  up2date-agent:
-#    build:
-#      context: ../agent
-#    environment:
-#      UP2DATE_NODE_ID: local-dev-node
-#      UP2DATE_NODE_NAME: Local Dev Node
-#      UP2DATE_MQTT_HOST: mqtt
-#      UP2DATE_MQTT_PORT: 1883
-#      UP2DATE_DOCKER_SOCKET: /var/run/docker.sock
-#      UP2DATE_INTERVAL_SECONDS: 60
-#      UP2DATE_INCLUDE_STOPPED: "true"
-#      UP2DATE_RETAIN_MESSAGES: "true"
-#    labels:
-#      up2date.ignore: "true"
-#    volumes:
-#      - ${UP2DATE_HOST_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock:ro
-#    security_opt:
-#      - label=disable
-#    restart: unless-stopped
+  up2date-agent:
+    build:
+      context: ../agent
+    depends_on:
+      - mqtt
+    environment:
+      UP2DATE_NODE_ID: local-dev-node
+      UP2DATE_NODE_NAME: Local Dev Node
+      UP2DATE_MQTT_HOST: mqtt
+      UP2DATE_MQTT_PORT: 1883
+      UP2DATE_DOCKER_SOCKET: /var/run/docker.sock
+      UP2DATE_INTERVAL_SECONDS: 60
+      UP2DATE_INCLUDE_STOPPED: "true"
+      UP2DATE_RETAIN_MESSAGES: "true"
+    labels:
+      up2date.ignore: "true"
+    volumes:
+      - ${UP2DATE_HOST_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    security_opt:
+      - label=disable
+    restart: unless-stopped
 
   up2date-resolver:
-    image: ${UP2DATE_RESOLVER_IMAGE:-docker.io/ch4rl3x/up2date-resolver:0.1.0-alpha.1}
-#    build:
-#      context: ../resolver
+    build:
+      context: ../resolver
+    depends_on:
+      - mqtt
     environment:
-      UP2DATE_MQTT_HOST: ${UP2DATE_MQTT_HOST:-mqtt.example.internal}
-      UP2DATE_MQTT_PORT: ${UP2DATE_MQTT_PORT:-1883}
-      UP2DATE_MQTT_USERNAME: ${UP2DATE_MQTT_USERNAME:-change-me}
-      UP2DATE_MQTT_PASSWORD: ${UP2DATE_MQTT_PASSWORD:-change-me}
+      UP2DATE_MQTT_HOST: mqtt
+      UP2DATE_MQTT_PORT: 1883
       UP2DATE_RETAIN_MESSAGES: "true"
     labels:
       up2date.ignore: "true"

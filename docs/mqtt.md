@@ -4,9 +4,9 @@ This document defines the current MVP transport for `up2date`.
 
 ## Goal
 
-Validate the host-side collection model before a backend exists.
+Validate the host-side collection model and the first resolver loop before a backend exists.
 
-The agent publishes Docker state snapshots to MQTT. For now, humans inspect those values with MQTT Explorer or similar tooling.
+The agent publishes Docker state snapshots and status summaries to MQTT. A separate resolver consumes snapshots and publishes compact per-service check results. Humans can inspect all of that directly with MQTT Explorer or similar tooling.
 
 ## Why MQTT For The MVP
 
@@ -33,6 +33,8 @@ Current topics:
 - `up2date/nodes/<node-id>/checks/<service>`
 
 All of these topics should be published as retained messages.
+
+The snapshot remains the primary contract. Status and check topics are convenience outputs derived from it.
 
 ## Snapshot Payload
 
@@ -123,6 +125,7 @@ Notes:
 
 - `latest_version` is only published when the resolver finds a compatible version track with high confidence.
 - if a registry contains mixed tag schemes, the resolver prefers returning `unknown` over publishing a misleading `latest_version`.
+- if the current version cannot be compared safely, the resolver publishes `unsupported` or `error` with a `reason`.
 - use the snapshot topic if you need debug metadata such as image tag, version source, or exact observation details.
 
 ## Publication Rules
@@ -142,9 +145,9 @@ When a backend is added later, it should treat a node as stale if no fresh snaps
 
 ## Deliberate MVP Omissions
 
-- no change history
-- no update decision logic yet
-- no persistent database
+- no backend-owned durable read model yet
+- no cross-node history
+- no automatic update actions
 - no per-container topics as the source of truth
 
 Those will come after the snapshot contract is stable.

@@ -2,13 +2,14 @@
 
 ## Current MVP Model
 
-The architecture is built around three distinct responsibilities:
+The current prototype is built around four distinct responsibilities:
 
 1. Docker-side current-state collection
 2. Snapshot normalization
-3. MQTT publication and resolution
+3. MQTT publication of current state
+4. Separate latest-version resolution and check publication
 
-Latest-version resolution and comparison are now handled by a separate resolver process and should remain separate from host-side collection.
+Latest-version resolution and comparison are intentionally handled by a separate resolver process and should remain separate from host-side collection.
 
 ## Current Components
 
@@ -21,6 +22,7 @@ Responsibilities:
 - execute collectors locally
 - enrich observations with node metadata
 - publish full node snapshots to MQTT
+- publish a lightweight node status summary
 - operate with least privilege
 
 Expected deployment forms:
@@ -36,6 +38,7 @@ Responsibilities:
 
 - accept repeated retained snapshots from agents
 - distribute raw snapshots to downstream consumers
+- distribute retained status summaries
 - distribute retained per-service checks from the resolver
 - stay dumb during the MVP phase
 
@@ -99,7 +102,7 @@ Normalized service output:
 
 ### Snapshots
 
-The snapshot is the current wire contract.
+The snapshot is the primary wire contract.
 
 Normalized node snapshot:
 
@@ -116,6 +119,23 @@ Normalized node snapshot:
 
 Future resolver and comparison layers must consume this normalized model instead of coupling themselves to Docker-specific raw data.
 
+### Status Summaries
+
+Status summaries are derived convenience messages published by the agent.
+
+Normalized agent status:
+
+```json
+{
+  "schema_version": 1,
+  "kind": "agent_status",
+  "agent_id": "docker-host-01",
+  "observed_at": "2026-03-24T18:42:00Z",
+  "service_count": 12,
+  "running_service_count": 11
+}
+```
+
 ### Checks
 
 Checks are derived messages published by the resolver.
@@ -127,14 +147,18 @@ Normalized service check:
   "schema_version": 1,
   "kind": "service_check",
   "node_id": "docker-host-01",
+  "node_name": "Docker Host 01",
   "service_name": "plex",
+  "observed_at": "2026-03-24T18:42:30Z",
+  "image_name": "lscr.io/linuxserver/plex",
   "current_version": "1.41.8",
   "latest_version": "1.42.0",
   "status": "outdated",
-  "update_available": true,
-  "resolver": "docker_registry"
+  "update_available": true
 }
 ```
+
+The check topic is intentionally compact and user-facing. Detailed provenance remains on the snapshot side.
 
 ## Data Flow
 
@@ -146,8 +170,10 @@ flowchart LR
     D --> E["MQTT Broker"]
     E --> F["up2date-resolver"]
     F --> G["Per-Service Checks"]
-    G --> H["MQTT Explorer"]
-    G --> I["Future Backend Subscriber"]
+    D --> H["MQTT Explorer"]
+    G --> H
+    D --> I["Future Backend Subscriber"]
+    G --> I
 ```
 
 ## Data Entities
@@ -166,7 +192,7 @@ One full message containing the last observed state of a node.
 
 ### Status Summary
 
-A lightweight retained summary derived from the snapshot.
+A lightweight retained summary derived from the snapshot for quick inspection.
 
 ### Service Check
 
@@ -176,13 +202,13 @@ A retained per-service result derived from one snapshot plus resolver logic. Thi
 
 - Prefer outbound agent push over central privileged access.
 - Scope Docker access to the local socket only.
-- Keep MQTT credentials scoped to publish-only when possible.
+- Keep MQTT credentials scoped to publish-only or least-privilege broker roles when possible.
 - Avoid requiring root unless a collector truly needs it.
 - Make sensitive configuration sources explicit.
 
 ## First Concrete Implementation Slice
 
-The easiest end-to-end slice is:
+The current end-to-end slice is:
 
 1. `docker_engine` collector
 2. Docker Compose metadata extraction from labels

@@ -1,4 +1,4 @@
-# Prototype Agent
+# Agent
 
 This directory contains the first validation implementation of `up2date-agent`.
 
@@ -7,13 +7,13 @@ It is intentionally small and dependency-free:
 - Python standard library only
 - reads Docker state from the local Docker socket
 - publishes retained MQTT snapshots and status summaries
-- no backend required
+- keeps current-state collection separate from latest-version resolution
 
 ## Why This Exists
 
-The goal is to validate the MQTT contract and Docker collection behavior before committing to the long-term production runtime.
+The goal is to validate the MQTT snapshot contract and Docker collection behavior before committing to the long-term production runtime.
 
-The production runtime recommendation remains Go. This implementation is here to make the MVP cheap to iterate on.
+The production runtime recommendation remains Go. This implementation exists to make the prototype cheap to iterate on while keeping the domain model explicit.
 
 `UP2DATE_NODE_ID` is the stable technical identity for the MQTT topic path. `UP2DATE_NODE_NAME` is an optional human-friendly label that appears inside the snapshot payload.
 
@@ -36,10 +36,15 @@ The production runtime recommendation remains Go. This implementation is here to
 - `UP2DATE_EXCLUDE_SELF`
 - `UP2DATE_EXCLUDE_LABELS`
 
-## Default Topics
+## Topics
 
-- `up2date/nodes/<node-id>/snapshot`
-- `up2date/nodes/<node-id>/status`
+- publishes to `up2date/nodes/<node-id>/snapshot`
+- publishes to `up2date/nodes/<node-id>/status`
+
+Related contracts:
+
+- [schemas/mqtt-node-snapshot.schema.json](/Users/alex/Workspace/up2date/schemas/mqtt-node-snapshot.schema.json)
+- [schemas/agent-status.schema.json](/Users/alex/Workspace/up2date/schemas/agent-status.schema.json)
 
 ## Local Dry Run
 
@@ -53,7 +58,7 @@ python3 agent/app/up2date_agent.py
 
 ## Compose Run
 
-From the repository root:
+For the local end-to-end demo stack:
 
 ```bash
 podman compose -f examples/compose.yaml up --build
@@ -72,6 +77,13 @@ cd examples
 podman compose up --build
 ```
 
+The demo stack includes:
+
+- a demo app
+- a local Mosquitto broker
+- `up2date-agent`
+- `up2date-resolver`
+
 If the agent reports `Permission denied` for `/var/run/docker.sock`, the common Podman fixes are:
 
 - use your rootless Podman socket with `UP2DATE_HOST_SOCKET_PATH="${XDG_RUNTIME_DIR}/podman/podman.sock"`
@@ -87,4 +99,5 @@ Containers can be excluded from the snapshot with labels like `up2date.ignore=tr
 
 ```bash
 python3 -m unittest discover -s agent/tests -v
+python3 -m unittest discover -s tests -v
 ```

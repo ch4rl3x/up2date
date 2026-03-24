@@ -1,5 +1,14 @@
 # Roadmap
 
+## Current Repository Status
+
+This repository already contains prototype implementations for the first two delivery phases:
+
+- Phase 1: MQTT validation agent
+- Phase 2: MQTT resolver
+
+The next major delivery focus is the backend subscriber and UI surface that consume the same contracts.
+
 ## Phase 0: Foundation
 
 - freeze the product model
@@ -9,12 +18,14 @@
 
 ## Phase 1: MQTT Validation MVP
 
-- implement a local agent or CLI
-- support Docker Engine scanning
-- detect current image tags and version labels
-- publish full node snapshots to MQTT
-- inspect results in MQTT Explorer
-- refine the topic and payload shape
+Prototype status in this repository:
+
+- local agent implementation exists
+- Docker Engine scanning exists
+- image tag and version label detection exists
+- full node snapshot publishing exists
+- node status summary publishing exists
+- local inspection in MQTT Explorer exists
 
 Success criteria:
 
@@ -24,10 +35,18 @@ Success criteria:
 
 ## Phase 2: MQTT Resolver
 
-- build a resolver that consumes MQTT snapshots
-- resolve latest versions from registries or APIs
-- compare current and latest versions
-- publish per-service check topics
+Prototype status in this repository:
+
+- resolver consumes MQTT snapshots
+- registry tag lookup exists for Docker-style registries
+- current-vs-latest comparison exists for compatible numeric tracks
+- per-service retained check topics exist
+
+Still intentionally limited:
+
+- no persistent backend read model yet
+- no user-configurable comparator strategies yet
+- no non-registry resolvers yet
 
 ## Phase 3: Backend Subscriber
 

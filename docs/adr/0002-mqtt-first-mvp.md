@@ -10,20 +10,26 @@ The riskiest early questions for `up2date` are not UI or persistence questions. 
 - can a sidecar reliably inspect nearby Docker containers
 - what should the normalized state payload look like
 - how often should the system publish state
+- how should latest-version resolution stay separate from collection
 - what does a later backend actually need to consume
 
 Building a backend before those questions are settled would likely create throwaway ingestion logic.
 
 ## Decision
 
-The MVP will start without a dedicated backend.
+The MVP starts without a dedicated backend.
 
 Instead:
 
 - one `up2date-agent` sidecar runs per Docker host
 - it reads local container state from the Docker socket
 - it publishes a full node snapshot to MQTT every minute
-- humans inspect the result in MQTT Explorer during the first validation phase
+- it publishes a small retained node status summary derived from that snapshot
+- a separate `up2date-resolver` consumes snapshots
+- the resolver publishes one retained per-service check topic per processed snapshot
+- humans inspect those topics in MQTT Explorer during the first validation phase
+
+The snapshot contract remains the MVP source of truth. Status and check topics are derived views that make the data easier to inspect and consume.
 
 The first backend must consume the same MQTT snapshot contract rather than replacing it.
 
@@ -31,17 +37,18 @@ The first backend must consume the same MQTT snapshot contract rather than repla
 
 Positive:
 
-- smallest possible validation loop
+- smallest practical end-to-end validation loop
 - easy to debug from a laptop
 - transport contract becomes concrete early
+- latest-version logic stays separated from collection
 - backend design can emerge from observed data instead of guesses
 
 Negative:
 
-- no history
 - no durable read model yet
-- stale detection is manual until a backend exists
+- stale detection is still manual until a backend exists
 - retained messages or frequent republishing are needed for a good observer experience
+- per-service checks are derived convenience data, not the authoritative record
 
 ## Rejected Alternatives
 
@@ -52,6 +59,10 @@ Rejected because it is too fragile for observer restarts and misses later state 
 ### Backend-First HTTP Ingestion
 
 Rejected for now because it would force an ingestion model before the snapshot contract is stable.
+
+### Resolver Logic Inside The Agent
+
+Rejected because it would blur the boundary between current-state collection and future latest-version resolution.
 
 ### MQTT Per Container As Primary Model
 

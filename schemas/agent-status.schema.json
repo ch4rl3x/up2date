@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://up2date.dev/schemas/agent-status.schema.json",
+  "title": "up2date agent status",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "agent_id",
+    "observed_at",
+    "service_count",
+    "running_service_count"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "type": "string",
+      "const": "agent_status"
+    },
+    "agent_id": {
+      "type": "string"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "service_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "running_service_count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}

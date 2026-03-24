@@ -33,11 +33,13 @@ Long-term that means:
 - explainable results
 - central visibility
 
-The current MVP solves only the first slice of that model:
+The current prototype validates the first practical loop of that model:
 
 - discover Docker containers locally
 - normalize their runtime state into one node snapshot
-- publish that snapshot to MQTT on a fixed cadence
+- publish snapshots and status summaries to MQTT on a fixed cadence
+- resolve newer registry tags in a separate process
+- publish retained per-service check topics
 
 ## Goals
 
@@ -68,13 +70,16 @@ Primary users:
 
 ## MVP Definition
 
-The MVP focuses on one narrow but high-value loop:
+The current MVP focuses on one narrow but high-value loop:
 
 1. Observe Docker deployments on a node.
 2. Extract image tags, version labels, and running state.
-3. Publish one normalized snapshot to MQTT every minute.
-4. Inspect that state directly in MQTT Explorer.
-5. Use the learned contract as the basis for the first backend.
+3. Publish one normalized snapshot plus a small status summary to MQTT every minute.
+4. Consume those snapshots in a separate resolver process.
+5. Publish one retained per-service check result for easy inspection.
+6. Use the learned snapshot contract as the basis for the first backend.
+
+Snapshot topics remain the source of truth. Check topics exist to make the update outcome easier to inspect and consume.
 
 ## Product Principles
 
