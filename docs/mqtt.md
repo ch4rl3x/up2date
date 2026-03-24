@@ -30,8 +30,9 @@ Current topics:
 
 - `up2date/nodes/<node-id>/snapshot`
 - `up2date/nodes/<node-id>/status`
+- `up2date/nodes/<node-id>/checks/<service>`
 
-Both topics should be published as retained messages.
+All of these topics should be published as retained messages.
 
 ## Snapshot Payload
 
@@ -90,11 +91,46 @@ Example:
 }
 ```
 
+## Check Payload
+
+The resolver publishes one compact check payload per service.
+
+The snapshot remains the detailed source of truth. The check topic is intentionally slim so it is easier to consume in MQTT Explorer, Home Assistant, and later UIs.
+
+Example topic:
+
+- `up2date/nodes/local-dev-node/checks/app`
+
+Example payload:
+
+```json
+{
+  "schema_version": 1,
+  "kind": "service_check",
+  "node_id": "local-dev-node",
+  "node_name": "Local Dev Node",
+  "service_name": "app",
+  "observed_at": "2026-03-24T18:42:30Z",
+  "image_name": "docker.io/library/nginx",
+  "current_version": "1.27-alpine",
+  "latest_version": "1.28-alpine",
+  "status": "outdated",
+  "update_available": true
+}
+```
+
+Notes:
+
+- `latest_version` is only published when the resolver finds a compatible version track with high confidence.
+- if a registry contains mixed tag schemes, the resolver prefers returning `unknown` over publishing a misleading `latest_version`.
+- use the snapshot topic if you need debug metadata such as image tag, version source, or exact observation details.
+
 ## Publication Rules
 
 - Publish every 60 seconds by default.
 - Publish the full node snapshot each cycle.
 - Publish the status summary in the same cycle.
+- Publish one retained check message per service whenever a new snapshot is processed.
 - Use retained messages so new observers immediately see the last known state.
 - Treat the snapshot topic as the source of truth.
 
@@ -107,7 +143,6 @@ When a backend is added later, it should treat a node as stale if no fresh snaps
 ## Deliberate MVP Omissions
 
 - no change history
-- no version resolution against registries yet
 - no update decision logic yet
 - no persistent database
 - no per-container topics as the source of truth

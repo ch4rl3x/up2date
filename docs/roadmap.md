@@ -22,19 +22,19 @@ Success criteria:
 - the snapshot is easy to inspect from a laptop
 - running and stopped containers are distinguishable
 
-## Phase 2: Backend Subscriber
+## Phase 2: MQTT Resolver
 
-- build a subscriber that consumes the MQTT snapshot
+- build a resolver that consumes MQTT snapshots
+- resolve latest versions from registries or APIs
+- compare current and latest versions
+- publish per-service check topics
+
+## Phase 3: Backend Subscriber
+
+- build a subscriber that consumes snapshots and checks
 - expose the last known state through an API
 - add freshness and stale-node rules
 - add a basic list view
-
-## Phase 3: Version Resolution
-
-- resolve latest versions from registries or APIs
-- compare current and latest versions
-- mark workloads as outdated or unknown
-- keep the comparison model explicit
 
 ## Phase 4: Generic Collectors
 

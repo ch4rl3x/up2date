@@ -13,7 +13,7 @@ It is intentionally small and dependency-free:
 
 The goal is to validate the MQTT contract and Docker collection behavior before committing to the long-term production runtime.
 
-The production runtime recommendation remains Go. This prototype is here to make the MVP cheap to iterate on.
+The production runtime recommendation remains Go. This implementation is here to make the MVP cheap to iterate on.
 
 `UP2DATE_NODE_ID` is the stable technical identity for the MQTT topic path. `UP2DATE_NODE_NAME` is an optional human-friendly label that appears inside the snapshot payload.
 
@@ -47,8 +47,8 @@ The production runtime recommendation remains Go. This prototype is here to make
 UP2DATE_NODE_ID=lab-01 \
 UP2DATE_STDOUT_ONLY=true \
 UP2DATE_ONE_SHOT=true \
-UP2DATE_DOCKER_FIXTURE_PATH=prototype/agent/fixtures/docker_containers.json \
-python3 prototype/agent/app/up2date_agent.py
+UP2DATE_DOCKER_FIXTURE_PATH=agent/fixtures/docker_containers.json \
+python3 agent/app/up2date_agent.py
 ```
 
 ## Compose Run
@@ -86,5 +86,5 @@ Containers can be excluded from the snapshot with labels like `up2date.ignore=tr
 ## Test Run
 
 ```bash
-python3 -m unittest discover -s prototype/agent/tests -v
+python3 -m unittest discover -s agent/tests -v
 ```

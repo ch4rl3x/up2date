@@ -12,16 +12,19 @@ The long-term goal is broader than "WhatsUp Docker for Docker". `up2date` should
 
 ## Project Status
 
-This repository currently contains two things:
+This repository currently contains two runnable components plus the project direction:
 
 - the project direction and decision records
-- a first MQTT-first prototype agent for Docker hosts
+- `up2date-agent` for host-side Docker collection
+- `up2date-resolver` for version resolution and check topic enrichment
 
 The current MVP target is intentionally narrow:
 
 - one `up2date-agent` sidecar per Docker host
 - reads nearby containers through the Docker socket
 - publishes a full host snapshot to MQTT every minute
+- a separate `up2date-resolver` consumes those snapshots
+- publishes one check topic per service with update status
 - lets you inspect those values directly in MQTT Explorer
 - no dedicated backend yet
 
@@ -44,7 +47,7 @@ Why this is the long-term recommendation:
 
 If you strongly prefer the Kotlin ecosystem, use Kotlin/JVM instead of Kotlin Multiplatform for the first real implementation.
 
-For this repository's first prototype, the MQTT agent is written in Python standard library only. That is a validation vehicle, not a reversal of the long-term runtime decision.
+For this repository's first prototype, the MQTT agent and resolver are written in Python standard library only. That is a validation vehicle, not a reversal of the long-term runtime decision.
 
 ## Kotlin Multiplatform Verdict
 
@@ -76,7 +79,9 @@ See [docs/adr/0001-language-and-runtime.md](/Users/alex/Workspace/up2date/docs/a
 - Agent guidance: [AGENTS.md](/Users/alex/Workspace/up2date/AGENTS.md)
 - Compose quick-start: [examples/compose.yaml](/Users/alex/Workspace/up2date/examples/compose.yaml)
 - Snapshot schema: [schemas/mqtt-node-snapshot.schema.json](/Users/alex/Workspace/up2date/schemas/mqtt-node-snapshot.schema.json)
-- Prototype agent: [prototype/agent/README.md](/Users/alex/Workspace/up2date/prototype/agent/README.md)
+- Service check schema: [schemas/service-check.schema.json](/Users/alex/Workspace/up2date/schemas/service-check.schema.json)
+- Agent: [agent/README.md](/Users/alex/Workspace/up2date/agent/README.md)
+- Resolver: [resolver/README.md](/Users/alex/Workspace/up2date/resolver/README.md)
 
 ## Planned Repository Shape
 
@@ -85,8 +90,8 @@ This is the current repository shape:
 ```text
 docs/
 examples/
-prototype/
-  agent/
+agent/
+resolver/
 schemas/
 ```
 
@@ -111,6 +116,8 @@ The current MVP slice should do only this:
 - scan Docker workloads on a host
 - identify image names, tags, version labels, and running state
 - publish one full retained snapshot per node to MQTT every minute
+- consume snapshots in a separate resolver service
+- publish per-service update checks to MQTT
 - inspect the data directly in MQTT Explorer
 - refine topic and payload shape before a backend exists
 
@@ -121,14 +128,14 @@ The first backend should subscribe to the same MQTT snapshot contract instead of
 From the repository root:
 
 ```bash
-podman compose -f examples/compose.yaml up --build
+podman compose -f examples/compose.yaml up
 ```
 
 If you prefer to run from inside the `examples` directory:
 
 ```bash
 cd examples
-podman compose up --build
+podman compose up
 ```
 
 Important for Podman users:
@@ -149,3 +156,19 @@ If the agent logs `Permission denied` when opening `/var/run/docker.sock`, the t
 - keep the example's `security_opt: [label=disable]` because Podman documents SELinux label separation as a common cause of bind-mount access failures for host content
 
 For group-based access, Podman also documents `keep-groups` as a workaround when the container needs the caller's supplementary groups, but your current `podman compose` setup is using an external `docker-compose` provider, and that provider may treat `keep-groups` as a literal group name instead of a Podman special value. That is why the default example no longer sets it.
+
+The current example file is geared toward resolver deployment with a published image and placeholder MQTT settings. It also keeps commented local stack snippets for:
+
+- a demo app
+- Mosquitto
+- `up2date-agent`
+- a locally built `up2date-resolver`
+
+## Published Alpha Images
+
+The current Docker Hub naming plan is:
+
+- `docker.io/ch4rl3x/up2date-agent`
+- `docker.io/ch4rl3x/up2date-resolver`
+
+For Linux server tests, prefer explicit alpha tags and build `amd64` images when publishing from Apple Silicon.

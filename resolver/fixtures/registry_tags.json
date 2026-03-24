@@ -1,0 +1,15 @@
+{
+  "docker.io/library/nginx": [
+    "1.26-alpine",
+    "1.27-alpine",
+    "1.28-alpine",
+    "latest"
+  ],
+  "docker.io/library/eclipse-mosquitto": [
+    "1.6.15",
+    "2.0.20",
+    "2.1.2",
+    "2.1.4",
+    "latest"
+  ]
+}

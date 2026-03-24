@@ -20,6 +20,7 @@ The current MVP output is narrower:
 - which versions or tags they advertise
 - whether they are running right now
 - when that node was last observed
+- whether a newer registry tag appears to be available for a service
 
 ## Non-Negotiable Design Boundaries
 
@@ -48,13 +49,13 @@ Only optimize for these capabilities first:
 - Docker Engine collection
 - Docker Compose-aware metadata extraction
 - MQTT snapshot publishing
+- MQTT per-service check publishing
 - retained state that is easy to inspect in MQTT Explorer
-- a stable payload schema for a later backend
+- stable payload schemas for both snapshots and checks
 
 Treat the following as later additions:
 
 - backend subscriber and UI
-- latest-version resolution
 - SSH collectors
 - HTTP regex collectors
 - Proxmox-native inventory
@@ -83,7 +84,8 @@ Current long-term recommendation:
 
 Current prototype implementation:
 
-- Python standard library only under [prototype/agent](/Users/alex/Workspace/up2date/prototype/agent)
+- Python standard library only under [agent](/Users/alex/Workspace/up2date/agent)
+- Python standard library only under [resolver](/Users/alex/Workspace/up2date/resolver)
 
 Fallback if the team strongly prefers Kotlin later:
 
