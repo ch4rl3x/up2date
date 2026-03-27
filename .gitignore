@@ -30,6 +30,9 @@ dist/
 *.egg-info/
 *.tar
 *.tar.gz
+bin/
+*.test
+coverage.out
 
 # Logs and temp files
 *.log

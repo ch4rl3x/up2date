@@ -7,25 +7,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12", "3.13"]
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          go-version: "1.23"
 
-      - name: Run agent tests
-        run: python -m unittest discover -s agent/tests -v
-
-      - name: Run resolver tests
-        run: python -m unittest discover -s resolver/tests -v
-
-      - name: Run contract tests
-        run: python -m unittest discover -s tests -v
+      - name: Run Go tests
+        run: go test ./...

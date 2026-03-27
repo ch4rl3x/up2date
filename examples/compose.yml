@@ -1,0 +1,32 @@
+services:
+  app:
+    image: docker.io/library/nginx:1.27-alpine
+    restart: unless-stopped
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    labels:
+      up2date.ignore: "true"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  up2date:
+    build:
+      context: ..
+    depends_on:
+      - mqtt
+    restart: unless-stopped
+    environment:
+      UP2DATE_NODE_ID: local-dev-node
+      UP2DATE_INTERVAL: 1m
+      UP2DATE_COLLECTOR_TYPE: docker
+      UP2DATE_RESOLVER_TYPE: docker_hub
+      UP2DATE_PUBLISHER_TYPE: mqtt
+      UP2DATE_PUBLISHER_MQTT_HOST: mqtt
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt:
+      - label=disable

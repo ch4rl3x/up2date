@@ -1,6 +1,0 @@
-__pycache__/
-*.py[cod]
-fixtures/
-tests/
-README.md
-.DS_Store
