@@ -147,23 +147,11 @@ func determineResolution(observation model.Observation, ref registryReference, t
 		}
 	}
 
-	imageTag := observation.Attributes["image_tag"]
-	parsedImageTag := parseVersion(imageTag)
 	filtered := make([]parsedVersion, 0, len(candidates))
-	if parsedImageTag != nil && len(parsedImageTag.Numbers) == 1 {
-		for _, candidate := range candidates {
-			if len(candidate.Numbers) == len(parsedCurrent.Numbers) &&
-				candidate.Suffix == parsedCurrent.Suffix &&
-				candidate.Numbers[0] == parsedImageTag.Numbers[0] {
-				filtered = append(filtered, candidate)
-			}
-		}
-	} else {
-		for _, candidate := range candidates {
-			if len(candidate.Numbers) == len(parsedCurrent.Numbers) &&
-				candidate.Suffix == parsedCurrent.Suffix {
-				filtered = append(filtered, candidate)
-			}
+	for _, candidate := range candidates {
+		if len(candidate.Numbers) == len(parsedCurrent.Numbers) &&
+			candidate.Suffix == parsedCurrent.Suffix {
+			filtered = append(filtered, candidate)
 		}
 	}
 

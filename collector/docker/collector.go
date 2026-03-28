@@ -38,6 +38,7 @@ var (
 		"org.opencontainers.image.version",
 		"org.label-schema.version",
 	}
+	versionTagPattern = regexp.MustCompile(`^v?\d+(?:\.\d+)*(?:[-._][A-Za-z0-9][A-Za-z0-9._-]*)?$`)
 )
 
 type Config struct {
@@ -297,7 +298,7 @@ func buildObservation(item container) model.Observation {
 	containerName := firstContainerName(item)
 	imageName, imageTag := parseImageReference(item.Image)
 	artifactName := shortArtifactName(imageName)
-	currentVersion, source, versionLabelKey := detectVersion(item.Labels, imageTag)
+	currentVersion, source, versionLabelKey, versionLabelValue := detectVersion(item.Labels, imageTag)
 	projectName := item.Labels["com.docker.compose.project"]
 	serviceName := item.Labels["com.docker.compose.service"]
 	if serviceName == "" {
@@ -317,6 +318,9 @@ func buildObservation(item container) model.Observation {
 	}
 	if versionLabelKey != "" {
 		attributes["version_label_key"] = versionLabelKey
+	}
+	if versionLabelValue != "" {
+		attributes["version_label_value"] = versionLabelValue
 	}
 
 	return model.Observation{
@@ -450,25 +454,44 @@ func matchesLabelSelector(labels map[string]string, selector string) bool {
 	return ok
 }
 
-func detectVersion(labels map[string]string, imageTag string) (string, string, string) {
-	for _, key := range versionLabelKeys {
-		if value := labels[key]; value != "" {
-			return value, "container_label", key
-		}
+func detectVersion(labels map[string]string, imageTag string) (string, string, string, string) {
+	labelValue, labelKey := detectVersionLabel(labels)
+	if parseVersionTag(imageTag) {
+		return imageTag, "image_tag", labelKey, labelValue
+	}
+	if labelValue != "" {
+		return labelValue, "container_label", labelKey, labelValue
 	}
 	if imageTag != "" {
-		return imageTag, "image_tag", ""
+		return imageTag, "image_tag", "", ""
 	}
-	return "unknown", "unknown", ""
+	return "unknown", "unknown", "", ""
+}
+
+func detectVersionLabel(labels map[string]string) (string, string) {
+	for _, key := range versionLabelKeys {
+		if value := labels[key]; value != "" {
+			return value, key
+		}
+	}
+	return "", ""
+}
+
+func parseVersionTag(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	return versionTagPattern.MatchString(value)
 }
 
 func parseImageReference(image string) (string, string) {
+	image = strings.TrimSpace(image)
 	if image == "" {
 		return "", ""
 	}
-	if strings.Contains(image, "@") {
-		parts := strings.SplitN(image, "@", 2)
-		return parts[0], ""
+	if at := strings.IndexByte(image, '@'); at >= 0 {
+		image = image[:at]
 	}
 
 	lastSlash := strings.LastIndex(image, "/")

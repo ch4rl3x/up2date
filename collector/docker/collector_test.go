@@ -68,6 +68,72 @@ func TestCollectUsesTCPEndpoint(t *testing.T) {
 	}
 }
 
+func TestBuildObservationPrefersVersionedImageTagOverContainerLabel(t *testing.T) {
+	observation := buildObservation(container{
+		ID:     "1234567890abcdef",
+		Names:  []string{"/mosquitto"},
+		Image:  "docker.io/eclipse-mosquitto:2.1.2-alpine",
+		Status: "Up 10 minutes",
+		Labels: map[string]string{
+			"org.opencontainers.image.version": "2.1.2",
+		},
+	})
+
+	if observation.CurrentVersion != "2.1.2-alpine" {
+		t.Fatalf("current version = %q, want 2.1.2-alpine", observation.CurrentVersion)
+	}
+	if observation.CurrentVersionSource != "image_tag" {
+		t.Fatalf("current version source = %q, want image_tag", observation.CurrentVersionSource)
+	}
+	if observation.Attributes["version_label_key"] != "org.opencontainers.image.version" {
+		t.Fatalf("version label key = %q, want org.opencontainers.image.version", observation.Attributes["version_label_key"])
+	}
+	if observation.Attributes["version_label_value"] != "2.1.2" {
+		t.Fatalf("version label value = %q, want 2.1.2", observation.Attributes["version_label_value"])
+	}
+}
+
+func TestBuildObservationFallsBackToContainerLabelForNonVersionedImageTag(t *testing.T) {
+	observation := buildObservation(container{
+		ID:     "1234567890abcdef",
+		Names:  []string{"/nginx"},
+		Image:  "docker.io/library/nginx:latest",
+		Status: "Up 10 minutes",
+		Labels: map[string]string{
+			"org.opencontainers.image.version": "1.27.4",
+		},
+	})
+
+	if observation.CurrentVersion != "1.27.4" {
+		t.Fatalf("current version = %q, want 1.27.4", observation.CurrentVersion)
+	}
+	if observation.CurrentVersionSource != "container_label" {
+		t.Fatalf("current version source = %q, want container_label", observation.CurrentVersionSource)
+	}
+}
+
+func TestBuildObservationKeepsVersionedTagWhenImageAlsoHasDigest(t *testing.T) {
+	observation := buildObservation(container{
+		ID:     "1234567890abcdef",
+		Names:  []string{"/immich-redis"},
+		Image:  "docker.io/valkey/valkey:8@sha256:81db6d39e1bba3b3ff32bd3a1b19a6d69690f94a3954ec131277b9a26b95b3aa",
+		Status: "Up 10 minutes",
+	})
+
+	if observation.ArtifactName != "valkey" {
+		t.Fatalf("artifact name = %q, want valkey", observation.ArtifactName)
+	}
+	if observation.CurrentVersion != "8" {
+		t.Fatalf("current version = %q, want 8", observation.CurrentVersion)
+	}
+	if observation.CurrentVersionSource != "image_tag" {
+		t.Fatalf("current version source = %q, want image_tag", observation.CurrentVersionSource)
+	}
+	if observation.Attributes["image_tag"] != "8" {
+		t.Fatalf("image tag = %q, want 8", observation.Attributes["image_tag"])
+	}
+}
+
 func TestNewRejectsUnsupportedEndpointScheme(t *testing.T) {
 	_, err := New(Config{Endpoint: "ssh://dockerproxy:22"})
 	if err == nil {

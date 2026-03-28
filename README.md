@@ -284,6 +284,7 @@ Fuer Dauerlauf statt One-Shot:
 - Auf macOS mit Podman Machine ist `${HOME}/.local/share/containers/podman/machine/podman.sock` oft nicht der richtige Socket fuer den Container. Nutze stattdessen typischerweise den Socket innerhalb der Podman-VM, z. B. `/run/user/1000/podman/podman.sock` oder `/run/podman/podman.sock`.
 - Auf SELinux-Systemen kann bei Podman zusaetzlich `security_opt: [label=disable]` noetig sein.
 - Der Docker-Resolver entscheidet anhand von `artifact_ref`, welche Registry verwendet wird. Aktuell unterstuetzt er Docker Hub und GHCR. Andere Registries landen derzeit als `unsupported`.
+- Fuer parsebare numerische Docker-Tags vergleicht der Resolver aktuell Kandidaten mit gleicher Segmentzahl und gleichem Suffix. Ein Tag wie `17` kann dadurch auch auf `18` als neueres Release zeigen, waehrend `17.1-alpine` weiter nur mit anderen `x.y-alpine`-Tags verglichen wird.
 - Der `package`-Collector unterstuetzt in der ersten Ausbaustufe `dpkg-query` und Homebrew `brew info --formula --json=v2`.
 - Datei-Configs unterstuetzen den einfachen YAML-/JSON-Stil aus den Beispielen, also verschachtelte Mappings und String-Listen.
 - Published werden nur die einzelnen Feldwerte pro Service.

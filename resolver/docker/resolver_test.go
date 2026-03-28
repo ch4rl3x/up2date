@@ -152,6 +152,40 @@ func TestDetermineResolutionPrefersDeployedImageTagOverContainerLabel(t *testing
 	}
 }
 
+func TestDetermineResolutionMajorOnlyTagCanAdvanceToNewerMajor(t *testing.T) {
+	observation := model.Observation{
+		ServiceName:    "postgres",
+		ArtifactName:   "postgres",
+		ArtifactRef:    "docker.io/library/postgres:17",
+		CurrentVersion: "17",
+		ObservedVia:    "docker_socket",
+		Attributes: map[string]string{
+			"image_tag": "17",
+		},
+	}
+	ref := registryReference{
+		Kind:       registryKindDockerHub,
+		Registry:   "docker.io",
+		Repository: "library/postgres",
+	}
+
+	result := determineResolution(observation, ref, []string{
+		"16",
+		"17",
+		"18",
+	})
+
+	if result.status != "outdated" {
+		t.Fatalf("status = %q, want outdated", result.status)
+	}
+	if result.latestVersion != "18" {
+		t.Fatalf("latest version = %q, want 18", result.latestVersion)
+	}
+	if result.update == nil || !*result.update {
+		t.Fatalf("update available = %#v, want true", result.update)
+	}
+}
+
 func TestRegistryClientListTagsHandlesBearerChallengeAndPagination(t *testing.T) {
 	tokenRequests := 0
 	tagRequests := 0
