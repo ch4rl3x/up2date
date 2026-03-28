@@ -8,6 +8,7 @@ import (
 	"time"
 
 	dockercollector "up2date/collector/docker"
+	ospackagecollector "up2date/collector/ospackage"
 	mqttpublisher "up2date/publisher/mqtt"
 )
 
@@ -31,8 +32,9 @@ type JobConfig struct {
 }
 
 type CollectorConfig struct {
-	Type   string
-	Docker dockercollector.Config
+	Type    string
+	Docker  dockercollector.Config
+	Package ospackagecollector.Config
 }
 
 type ResolverConfig struct {
@@ -105,12 +107,19 @@ func Load() (Config, error) {
 			ExcludeSelf:    excludeSelf,
 			ExcludeLabels:  loadOptionalCSV("UP2DATE_COLLECTOR_DOCKER_EXCLUDE_LABELS"),
 		}
+	case "package":
+		cfg.Job.Collector.Package = ospackagecollector.Config{
+			Manager: strings.TrimSpace(os.Getenv("UP2DATE_COLLECTOR_PACKAGE_MANAGER")),
+			Names:   loadOptionalCSV("UP2DATE_COLLECTOR_PACKAGE_NAMES"),
+		}
 	default:
 		return Config{}, fmt.Errorf("unsupported collector type %q", collectorType)
 	}
 
 	switch resolverType {
+	case "brew_formula":
 	case "docker_hub":
+	case "none":
 	default:
 		return Config{}, fmt.Errorf("unsupported resolver type %q", resolverType)
 	}
@@ -221,6 +230,8 @@ func defaultResolverTypeForCollector(collectorType string) string {
 	switch collectorType {
 	case "docker":
 		return "docker_hub"
+	case "package":
+		return "none"
 	default:
 		return ""
 	}

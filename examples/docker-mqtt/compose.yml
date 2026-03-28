@@ -10,12 +10,12 @@ services:
     labels:
       up2date.ignore: "true"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     restart: unless-stopped
 
   up2date:
     build:
-      context: ..
+      context: ../..
     depends_on:
       - mqtt
     restart: unless-stopped

@@ -5,9 +5,12 @@ import (
 	"log/slog"
 
 	dockercollector "up2date/collector/docker"
+	ospackagecollector "up2date/collector/ospackage"
 	"up2date/common/model"
 	mqttpublisher "up2date/publisher/mqtt"
+	brewformularesolver "up2date/resolver/brewformula"
 	dockerhubresolver "up2date/resolver/dockerhub"
+	noneresolver "up2date/resolver/none"
 )
 
 func Build(cfg Config, logger *slog.Logger) (*Orchestrator, error) {
@@ -48,6 +51,8 @@ func buildCollector(cfg CollectorConfig) (Collector, error) {
 	switch cfg.Type {
 	case "docker":
 		return dockercollector.New(cfg.Docker), nil
+	case "package":
+		return ospackagecollector.New(cfg.Package)
 	default:
 		return nil, fmt.Errorf("unsupported collector type %q", cfg.Type)
 	}
@@ -55,8 +60,12 @@ func buildCollector(cfg CollectorConfig) (Collector, error) {
 
 func buildResolver(cfg ResolverConfig) (Resolver, error) {
 	switch cfg.Type {
+	case "brew_formula":
+		return brewformularesolver.New(), nil
 	case "docker_hub":
 		return dockerhubresolver.New(), nil
+	case "none":
+		return noneresolver.New(), nil
 	default:
 		return nil, fmt.Errorf("unsupported resolver type %q", cfg.Type)
 	}
