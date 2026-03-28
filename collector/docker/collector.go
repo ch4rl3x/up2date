@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -19,7 +20,8 @@ import (
 )
 
 const (
-	defaultSocket = "/var/run/docker.sock"
+	defaultSocket        = "/var/run/docker.sock"
+	defaultDockerAPIHost = "http://docker"
 )
 
 var (
@@ -39,13 +41,16 @@ var (
 )
 
 type Config struct {
+	Endpoint       string   `json:"endpoint,omitempty"`
 	IncludeStopped *bool    `json:"include_stopped,omitempty"`
 	ExcludeSelf    *bool    `json:"exclude_self,omitempty"`
 	ExcludeLabels  []string `json:"exclude_labels,omitempty"`
 }
 
 type Collector struct {
-	socket         string
+	endpoint       string
+	endpointScheme string
+	baseURL        string
 	includeStopped bool
 	excludeSelf    bool
 	excludeLabels  []string
@@ -61,7 +66,14 @@ type container struct {
 	Labels map[string]string `json:"Labels"`
 }
 
-func New(cfg Config) *Collector {
+type endpointConfig struct {
+	display string
+	scheme  string
+	baseURL string
+	socket  string
+}
+
+func New(cfg Config) (*Collector, error) {
 	includeStopped := true
 	if cfg.IncludeStopped != nil {
 		includeStopped = *cfg.IncludeStopped
@@ -77,15 +89,24 @@ func New(cfg Config) *Collector {
 		excludeLabels = append(excludeLabels, defaultExcludeLabels...)
 	}
 
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+	endpoint, err := resolveEndpoint(cfg.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if endpoint.scheme == "unix" {
+		transport.Proxy = nil
+		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var dialer net.Dialer
-			return dialer.DialContext(ctx, "unix", defaultSocket)
-		},
+			return dialer.DialContext(ctx, "unix", endpoint.socket)
+		}
 	}
 
 	return &Collector{
-		socket:         defaultSocket,
+		endpoint:       endpoint.display,
+		endpointScheme: endpoint.scheme,
+		baseURL:        endpoint.baseURL,
 		includeStopped: includeStopped,
 		excludeSelf:    excludeSelf,
 		excludeLabels:  excludeLabels,
@@ -93,7 +114,7 @@ func New(cfg Config) *Collector {
 			Transport: transport,
 			Timeout:   10 * time.Second,
 		},
-	}
+	}, nil
 }
 
 func (i *Collector) Collect(ctx context.Context, node model.Node, jobName string) (model.Snapshot, error) {
@@ -138,29 +159,41 @@ func (i *Collector) listContainers(ctx context.Context) ([]container, error) {
 		allValue = "1"
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/json?all="+allValue, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, i.baseURL+"/containers/json?all="+allValue, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build docker request: %w", err)
 	}
 
 	response, err := i.client.Do(request)
 	if err != nil {
-		if isPermissionDenied(err) {
+		if i.endpointScheme == "unix" && isPermissionDenied(err) {
 			return nil, fmt.Errorf(
 				"query docker socket %q: permission denied; mount the container host engine socket to /var/run/docker.sock, and on SELinux systems add security_opt: [label=disable]",
-				i.socket,
+				i.endpoint,
+			)
+		}
+		if i.endpointScheme == "unix" && isConnectionRefused(err) {
+			return nil, fmt.Errorf(
+				"query docker socket %q: connection refused; a socket exists at that path but no compatible API is listening. On Podman use the socket from the container host itself, often /run/user/1000/podman/podman.sock or /run/podman/podman.sock, and mount it to /var/run/docker.sock",
+				i.endpoint,
 			)
 		}
 		if isConnectionRefused(err) {
 			return nil, fmt.Errorf(
-				"query docker socket %q: connection refused; a socket exists at that path but no compatible API is listening. On Podman use the socket from the container host itself, often /run/user/1000/podman/podman.sock or /run/podman/podman.sock, and mount it to /var/run/docker.sock",
-				i.socket,
+				"query docker endpoint %q: connection refused; check that a Docker-compatible HTTP API is reachable at that address",
+				i.endpoint,
 			)
 		}
-		return nil, fmt.Errorf("query docker socket %q: %w", i.socket, err)
+		return nil, fmt.Errorf("query docker endpoint %q: %w", i.endpoint, err)
 	}
 	defer response.Body.Close()
 
+	if response.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf(
+			"docker api returned %s; if you are using a Docker socket proxy, allow GET /containers/json (for Tecnativa/docker-socket-proxy set CONTAINERS=1)",
+			response.Status,
+		)
+	}
 	if response.StatusCode >= http.StatusBadRequest {
 		return nil, fmt.Errorf("docker api returned %s", response.Status)
 	}
@@ -170,6 +203,78 @@ func (i *Collector) listContainers(ctx context.Context) ([]container, error) {
 		return nil, fmt.Errorf("decode docker containers response: %w", err)
 	}
 	return payload, nil
+}
+
+func resolveEndpoint(raw string) (endpointConfig, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return endpointConfig{
+			display: defaultSocket,
+			scheme:  "unix",
+			baseURL: defaultDockerAPIHost,
+			socket:  defaultSocket,
+		}, nil
+	}
+
+	if strings.HasPrefix(raw, "/") {
+		return endpointConfig{
+			display: raw,
+			scheme:  "unix",
+			baseURL: defaultDockerAPIHost,
+			socket:  raw,
+		}, nil
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return endpointConfig{}, fmt.Errorf("parse docker endpoint %q: %w", raw, err)
+	}
+
+	switch parsed.Scheme {
+	case "unix":
+		if parsed.Host != "" {
+			return endpointConfig{}, fmt.Errorf("docker endpoint %q is invalid; use unix:///absolute/path.sock for unix sockets", raw)
+		}
+		if parsed.Path == "" {
+			return endpointConfig{}, fmt.Errorf("docker endpoint %q is invalid; unix endpoints need an absolute socket path", raw)
+		}
+		return endpointConfig{
+			display: raw,
+			scheme:  "unix",
+			baseURL: defaultDockerAPIHost,
+			socket:  parsed.Path,
+		}, nil
+	case "tcp":
+		if parsed.Host == "" {
+			return endpointConfig{}, fmt.Errorf("docker endpoint %q is invalid; tcp endpoints need host:port", raw)
+		}
+		if parsed.Path != "" && parsed.Path != "/" {
+			return endpointConfig{}, fmt.Errorf("docker endpoint %q is invalid; paths are not supported for tcp endpoints", raw)
+		}
+		return endpointConfig{
+			display: raw,
+			scheme:  "tcp",
+			baseURL: "http://" + parsed.Host,
+		}, nil
+	case "http", "https":
+		if parsed.Host == "" {
+			return endpointConfig{}, fmt.Errorf("docker endpoint %q is invalid; %s endpoints need host:port", raw, parsed.Scheme)
+		}
+		if parsed.Path != "" && parsed.Path != "/" {
+			return endpointConfig{}, fmt.Errorf("docker endpoint %q is invalid; paths are not supported for %s endpoints", raw, parsed.Scheme)
+		}
+		return endpointConfig{
+			display: raw,
+			scheme:  parsed.Scheme,
+			baseURL: strings.TrimRight(raw, "/"),
+		}, nil
+	default:
+		return endpointConfig{}, fmt.Errorf(
+			"docker endpoint %q has unsupported scheme %q; supported schemes are unix, tcp, http, https",
+			raw,
+			parsed.Scheme,
+		)
+	}
 }
 
 func isPermissionDenied(err error) bool {

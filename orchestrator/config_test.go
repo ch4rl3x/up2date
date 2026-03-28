@@ -52,6 +52,24 @@ func TestLoadDockerCollectorDefaultsToDockerResolver(t *testing.T) {
 	}
 }
 
+func TestLoadDockerCollectorEndpointFromEnv(t *testing.T) {
+	t.Setenv("UP2DATE_NODE_ID", "docker-host-01")
+	t.Setenv("UP2DATE_INTERVAL", "1m")
+	t.Setenv("UP2DATE_COLLECTOR_TYPE", "docker")
+	t.Setenv("UP2DATE_COLLECTOR_DOCKER_ENDPOINT", "tcp://dockerproxy:2375")
+	t.Setenv("UP2DATE_PUBLISHER_TYPE", "mqtt")
+	t.Setenv("UP2DATE_PUBLISHER_MQTT_HOST", "mqtt")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if cfg.Job.Collector.Docker.Endpoint != "tcp://dockerproxy:2375" {
+		t.Fatalf("docker endpoint = %q, want tcp://dockerproxy:2375", cfg.Job.Collector.Docker.Endpoint)
+	}
+}
+
 func TestLoadPackageCollectorDefaultsToBrewFormulaResolver(t *testing.T) {
 	t.Setenv("UP2DATE_NODE_ID", "macbook-alex")
 	t.Setenv("UP2DATE_INTERVAL", "1m")
@@ -146,6 +164,8 @@ interval: 1m
 
 collector:
   type: docker
+  docker:
+    endpoint: tcp://dockerproxy:2375
 
 publisher:
   mqtt:
@@ -163,6 +183,9 @@ publisher:
 
 	if cfg.Job.Resolver.Type != "docker" {
 		t.Fatalf("resolver type = %q, want docker", cfg.Job.Resolver.Type)
+	}
+	if cfg.Job.Collector.Docker.Endpoint != "tcp://dockerproxy:2375" {
+		t.Fatalf("docker endpoint = %q, want tcp://dockerproxy:2375", cfg.Job.Collector.Docker.Endpoint)
 	}
 }
 

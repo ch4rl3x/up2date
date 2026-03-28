@@ -96,6 +96,7 @@ func Load() (Config, error) {
 		}
 
 		cfg.Job.Collector.Docker = dockercollector.Config{
+			Endpoint:       strings.TrimSpace(os.Getenv("UP2DATE_COLLECTOR_DOCKER_ENDPOINT")),
 			IncludeStopped: includeStopped,
 			ExcludeSelf:    excludeSelf,
 			ExcludeLabels:  loadOptionalCSV("UP2DATE_COLLECTOR_DOCKER_EXCLUDE_LABELS"),

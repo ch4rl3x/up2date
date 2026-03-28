@@ -101,11 +101,15 @@ func buildConfigFromDocument(root map[string]any) (Config, error) {
 			return Config{}, err
 		}
 		if ok {
-			if err := validateKeys(dockerMap, "config.collector.docker", "exclude_labels", "exclude_self", "include_stopped"); err != nil {
+			if err := validateKeys(dockerMap, "config.collector.docker", "endpoint", "exclude_labels", "exclude_self", "include_stopped"); err != nil {
 				return Config{}, err
 			}
 		}
 
+		endpoint, _, err := optionalStringValue(dockerMap, "endpoint", "config.collector.docker.endpoint")
+		if err != nil {
+			return Config{}, err
+		}
 		includeStopped, err := optionalBoolPointerValue(dockerMap, "include_stopped", "config.collector.docker.include_stopped")
 		if err != nil {
 			return Config{}, err
@@ -120,6 +124,7 @@ func buildConfigFromDocument(root map[string]any) (Config, error) {
 		}
 
 		cfg.Job.Collector.Docker = dockercollector.Config{
+			Endpoint:       endpoint,
 			IncludeStopped: includeStopped,
 			ExcludeSelf:    excludeSelf,
 			ExcludeLabels:  excludeLabels,

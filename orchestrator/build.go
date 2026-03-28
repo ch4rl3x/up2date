@@ -50,7 +50,7 @@ func Build(cfg Config, logger *slog.Logger) (*Orchestrator, error) {
 func buildCollector(cfg CollectorConfig) (Collector, error) {
 	switch cfg.Type {
 	case "docker":
-		return dockercollector.New(cfg.Docker), nil
+		return dockercollector.New(cfg.Docker)
 	case "package":
 		return ospackagecollector.New(cfg.Package)
 	default:

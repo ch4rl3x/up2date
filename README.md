@@ -6,6 +6,8 @@ Der Collector liefert die aktuellen Fakten eines Workloads, inklusive `artifact_
 
 Die Konfiguration kann ueber Umgebungsvariablen oder ueber eine einfache YAML-/JSON-Datei passieren.
 
+Beim Docker-Collector ist der Standard weiter der lokale Unix-Socket `/var/run/docker.sock`. Optional kannst du stattdessen aber auch einen Docker-API-Endpoint wie `tcp://dockerproxy:2375` angeben, z. B. wenn du einen eingeschraenkten Socket-Proxy dazwischen setzen willst.
+
 ## Nutzung mit Docker Compose
 
 Direkt nutzbare Beispiele:
@@ -45,6 +47,34 @@ Starten:
 ```bash
 docker compose up --build -d
 ```
+
+Mit einem Socket-Proxy statt direktem Socket-Mount sieht der Collector-Teil z. B. so aus:
+
+```yaml
+services:
+  dockerproxy:
+    image: tecnativa/docker-socket-proxy:latest
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  up2date:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - dockerproxy
+    environment:
+      UP2DATE_NODE_ID: docker-host-01
+      UP2DATE_INTERVAL: 1m
+      UP2DATE_COLLECTOR_TYPE: docker
+      UP2DATE_COLLECTOR_DOCKER_ENDPOINT: tcp://dockerproxy:2375
+      UP2DATE_PUBLISHER_TYPE: mqtt
+      UP2DATE_PUBLISHER_MQTT_HOST: MQTT_HOST
+```
+
+Dabei bekommt nur der Proxy Zugriff auf `/var/run/docker.sock`; `up2date` spricht nur noch mit dem eingeschraenkten HTTP-Endpoint des Proxys.
 
 ## Binary mit Config-Datei
 
@@ -87,6 +117,15 @@ Der Resolver ist in Datei-Configs absichtlich nicht konfigurierbar. Er wird auto
 - `package` + `brew` -> `brew_formula`
 - `package` + `dpkg` -> `none`
 
+Fuer den Docker-Collector kannst du in Datei-Configs optional auch einen Endpoint setzen:
+
+```yaml
+collector:
+  type: docker
+  docker:
+    endpoint: tcp://dockerproxy:2375
+```
+
 ## Wichtige Variablen
 
 Allgemein:
@@ -106,6 +145,7 @@ Resolver:
 - Fuer Docker akzeptiert `UP2DATE_RESOLVER_TYPE` aus Rueckwaertskompatibilitaet sowohl `docker` als auch das alte Alias `docker_hub`
 
 Collector `docker`:
+- `UP2DATE_COLLECTOR_DOCKER_ENDPOINT` optional, z. B. `unix:///var/run/docker.sock` oder `tcp://dockerproxy:2375`
 - `UP2DATE_COLLECTOR_DOCKER_INCLUDE_STOPPED`
 - `UP2DATE_COLLECTOR_DOCKER_EXCLUDE_SELF`
 - `UP2DATE_COLLECTOR_DOCKER_EXCLUDE_LABELS`
@@ -237,8 +277,10 @@ Fuer Dauerlauf statt One-Shot:
 ## Hinweise
 
 - Das Label `up2date.ignore=true` ist optional. Der Docker-Collector schliesst sich standardmaessig selbst aus.
-- Der Docker-Collector erwartet den Socket immer unter `/var/run/docker.sock` im Container.
-- Fuer Podman musst du deshalb den Socket des Container-Hosts auf `/var/run/docker.sock` in den Container mounten.
+- Ohne `UP2DATE_COLLECTOR_DOCKER_ENDPOINT` nutzt der Docker-Collector den Unix-Socket `/var/run/docker.sock`.
+- Fuer Podman kannst du entweder wie bisher den Socket des Container-Hosts auf `/var/run/docker.sock` in den Container mounten oder direkt einen Unix-Endpoint wie `unix:///run/podman/podman.sock` konfigurieren.
+- Fuer einen lokalen Socket-Proxy kannst du statt des direkten Socket-Mounts einen TCP-Endpoint wie `tcp://dockerproxy:2375` setzen.
+- Wenn du [Tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) nutzt, braucht `up2date` fuer den aktuellen Collector mindestens Zugriff auf `GET /containers/json`; bei diesem Proxy heisst das in der Praxis `CONTAINERS=1`. Den Proxy-Port solltest du nur im internen Docker-Netz veroeffentlichen, nicht ins Host-Netz.
 - Auf macOS mit Podman Machine ist `${HOME}/.local/share/containers/podman/machine/podman.sock` oft nicht der richtige Socket fuer den Container. Nutze stattdessen typischerweise den Socket innerhalb der Podman-VM, z. B. `/run/user/1000/podman/podman.sock` oder `/run/podman/podman.sock`.
 - Auf SELinux-Systemen kann bei Podman zusaetzlich `security_opt: [label=disable]` noetig sein.
 - Der Docker-Resolver entscheidet anhand von `artifact_ref`, welche Registry verwendet wird. Aktuell unterstuetzt er Docker Hub und GHCR. Andere Registries landen derzeit als `unsupported`.
