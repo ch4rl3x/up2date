@@ -83,7 +83,7 @@ UP2DATE_CONFIG_FILE=/etc/up2date/up2date.yaml ./up2date
 
 Der Resolver ist in Datei-Configs absichtlich nicht konfigurierbar. Er wird automatisch aus Collector und Paketmanager abgeleitet:
 
-- `docker` -> `docker_hub`
+- `docker` -> `docker`
 - `package` + `brew` -> `brew_formula`
 - `package` + `dpkg` -> `none`
 
@@ -99,10 +99,11 @@ Collector:
 
 Resolver:
 - Resolver werden standardmaessig automatisch abgeleitet:
-  - `docker` -> `docker_hub`
+  - `docker` -> `docker`
   - `package` + `brew` -> `brew_formula`
   - `package` + `dpkg` -> `none`
 - `UP2DATE_RESOLVER_TYPE` bleibt optional als explizite Env-Uebersteuerung fuer fortgeschrittene Faelle
+- Fuer Docker akzeptiert `UP2DATE_RESOLVER_TYPE` aus Rueckwaertskompatibilitaet sowohl `docker` als auch das alte Alias `docker_hub`
 
 Collector `docker`:
 - `UP2DATE_COLLECTOR_DOCKER_INCLUDE_STOPPED`
@@ -240,12 +241,13 @@ Fuer Dauerlauf statt One-Shot:
 - Fuer Podman musst du deshalb den Socket des Container-Hosts auf `/var/run/docker.sock` in den Container mounten.
 - Auf macOS mit Podman Machine ist `${HOME}/.local/share/containers/podman/machine/podman.sock` oft nicht der richtige Socket fuer den Container. Nutze stattdessen typischerweise den Socket innerhalb der Podman-VM, z. B. `/run/user/1000/podman/podman.sock` oder `/run/podman/podman.sock`.
 - Auf SELinux-Systemen kann bei Podman zusaetzlich `security_opt: [label=disable]` noetig sein.
-- Aktuell werden nur Docker-Hub-Images bewertet. Andere Registries landen derzeit als `unsupported`.
+- Der Docker-Resolver entscheidet anhand von `artifact_ref`, welche Registry verwendet wird. Aktuell unterstuetzt er Docker Hub und GHCR. Andere Registries landen derzeit als `unsupported`.
 - Der `package`-Collector unterstuetzt in der ersten Ausbaustufe `dpkg-query` und Homebrew `brew info --formula --json=v2`.
 - Datei-Configs unterstuetzen den einfachen YAML-/JSON-Stil aus den Beispielen, also verschachtelte Mappings und String-Listen.
 - Published werden nur die einzelnen Feldwerte pro Service.
 - `check_status` traegt das Resolver-Ergebnis wie `current`, `outdated`, `unsupported` oder `error`.
 - `artifact_name` ist ein vom Collector gelieferter, kurzer Anzeigename des Deployment-Artefakts, also z. B. `nginx`.
+- Fuer GHCR liefert der Docker-Resolver aktuell `latest_version`, aber noch keinen `latest_version_url`.
 - Der Resolver nutzt intern `artifact_ref`, damit `artifact_name` transport- und collectorfreundlich bleiben kann.
 - Alte retained Topics aus frueheren Versionen werden nicht automatisch migriert oder geloescht.
 - Fuer einen One-Shot-Run kannst du den Container mit `-once` starten.

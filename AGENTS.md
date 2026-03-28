@@ -31,7 +31,7 @@ Current concrete modules:
 - `collector/docker`
 - `collector/ospackage`
 - `resolver/brewformula`
-- `resolver/dockerhub`
+- `resolver/docker`
 - `resolver/none`
 - `publisher/mqtt`
 - `common/model`
@@ -46,7 +46,7 @@ The current MVP is intentionally narrow:
 - observe Docker workloads on a node
 - observe selected locally installed OS packages on a node
 - detect a current version or tag from the deployed artifact
-- resolve a newer relevant version from Docker Hub or, for Homebrew formulas, from Homebrew metadata
+- resolve a newer relevant version from Docker registries such as Docker Hub or GHCR or, for Homebrew formulas, from Homebrew metadata
 - publish a small retained per-service MQTT contract
 - make the state easy to inspect in MQTT Explorer
 
@@ -165,7 +165,7 @@ If a resolver only works for a subset of artifacts, that limitation should be ex
 
 ## Comparator Guidance
 
-Today, comparison logic is still embedded inside the Docker Hub resolver. That is acceptable for the current MVP.
+Today, comparison logic is still embedded inside the Docker resolver. That is acceptable for the current MVP.
 
 When comparison rules start to diverge, extract a dedicated comparator layer such as:
 

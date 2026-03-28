@@ -35,6 +35,23 @@ func TestLoadPackageCollectorDefaultsToNoneResolver(t *testing.T) {
 	}
 }
 
+func TestLoadDockerCollectorDefaultsToDockerResolver(t *testing.T) {
+	t.Setenv("UP2DATE_NODE_ID", "docker-host-01")
+	t.Setenv("UP2DATE_INTERVAL", "1m")
+	t.Setenv("UP2DATE_COLLECTOR_TYPE", "docker")
+	t.Setenv("UP2DATE_PUBLISHER_TYPE", "mqtt")
+	t.Setenv("UP2DATE_PUBLISHER_MQTT_HOST", "mqtt")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if cfg.Job.Resolver.Type != "docker" {
+		t.Fatalf("resolver type = %q, want docker", cfg.Job.Resolver.Type)
+	}
+}
+
 func TestLoadPackageCollectorDefaultsToBrewFormulaResolver(t *testing.T) {
 	t.Setenv("UP2DATE_NODE_ID", "macbook-alex")
 	t.Setenv("UP2DATE_INTERVAL", "1m")
@@ -51,6 +68,16 @@ func TestLoadPackageCollectorDefaultsToBrewFormulaResolver(t *testing.T) {
 
 	if cfg.Job.Resolver.Type != "brew_formula" {
 		t.Fatalf("resolver type = %q, want brew_formula", cfg.Job.Resolver.Type)
+	}
+}
+
+func TestBuildResolverAcceptsDockerHubAlias(t *testing.T) {
+	resolver, err := buildResolver(ResolverConfig{Type: "docker_hub"})
+	if err != nil {
+		t.Fatalf("buildResolver() returned error: %v", err)
+	}
+	if resolver == nil {
+		t.Fatal("buildResolver() returned nil resolver, want docker resolver")
 	}
 }
 
@@ -108,6 +135,34 @@ publisher:
 	}
 	if len(cfg.Job.Collector.Package.Names) != 2 {
 		t.Fatalf("package names count = %d, want 2", len(cfg.Job.Collector.Package.Names))
+	}
+}
+
+func TestLoadFromFileDerivesDockerResolverFromCollector(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "up2date.yaml")
+	config := strings.TrimSpace(`
+node_id: docker-host-01
+interval: 1m
+
+collector:
+  type: docker
+
+publisher:
+  mqtt:
+    host: mqtt
+`)
+
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatalf("WriteFile() returned error: %v", err)
+	}
+
+	cfg, err := LoadFromFile(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromFile() returned error: %v", err)
+	}
+
+	if cfg.Job.Resolver.Type != "docker" {
+		t.Fatalf("resolver type = %q, want docker", cfg.Job.Resolver.Type)
 	}
 }
 

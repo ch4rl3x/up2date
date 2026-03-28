@@ -1,4 +1,4 @@
-package dockerhub
+package docker
 
 import (
 	"context"
@@ -18,6 +18,11 @@ import (
 
 const defaultTimeout = 20 * time.Second
 
+const (
+	registryKindDockerHub = "docker_hub"
+	registryKindGHCR      = "ghcr"
+)
+
 var (
 	versionRe   = regexp.MustCompile(`^v?(\d+(?:\.\d+)*)([-._][A-Za-z0-9][A-Za-z0-9._-]*)?$`)
 	authParamRe = regexp.MustCompile(`(\w+)="([^"]*)"`)
@@ -31,9 +36,12 @@ type registryClient struct {
 	httpClient *http.Client
 }
 
-type hubReference struct {
+type registryReference struct {
+	Kind       string
+	Registry   string
 	Repository string
 	Display    string
+	APIBaseURL string
 }
 
 type parsedVersion struct {
@@ -63,13 +71,13 @@ func (r *Resolver) Resolve(ctx context.Context, snapshot model.Snapshot) ([]mode
 	cache := map[string][]string{}
 
 	for _, observation := range snapshot.Observations {
-		check := model.NewCheckResult(snapshot, observation, "docker_hub")
+		check := model.NewCheckResult(snapshot, observation, "docker")
 		currentVersion := selectCurrentVersion(observation)
 		if currentVersion != "" {
 			check.CurrentVersion = currentVersion
 		}
 
-		ref, err := parseDockerHubReference(selectArtifactReference(observation))
+		ref, err := parseRegistryReference(selectArtifactReference(observation))
 		if err != nil {
 			check.CheckStatus = "unsupported"
 			check.Reason = err.Error()
@@ -84,7 +92,8 @@ func (r *Resolver) Resolve(ctx context.Context, snapshot model.Snapshot) ([]mode
 			continue
 		}
 
-		tags, ok := cache[ref.Repository]
+		cacheKey := ref.Registry + "/" + ref.Repository
+		tags, ok := cache[cacheKey]
 		if !ok {
 			tags, err = r.client.listTags(ctx, ref)
 			if err != nil {
@@ -93,7 +102,7 @@ func (r *Resolver) Resolve(ctx context.Context, snapshot model.Snapshot) ([]mode
 				results = append(results, check)
 				continue
 			}
-			cache[ref.Repository] = tags
+			cache[cacheKey] = tags
 		}
 
 		resolution := determineResolution(observation, ref, tags)
@@ -113,7 +122,7 @@ func (r *Resolver) Resolve(ctx context.Context, snapshot model.Snapshot) ([]mode
 	return results, nil
 }
 
-func determineResolution(observation model.Observation, ref hubReference, tags []string) resolution {
+func determineResolution(observation model.Observation, ref registryReference, tags []string) resolution {
 	currentVersion := selectCurrentVersion(observation)
 	parsedCurrent := parseVersion(currentVersion)
 	if parsedCurrent == nil {
@@ -133,7 +142,7 @@ func determineResolution(observation model.Observation, ref hubReference, tags [
 	if len(candidates) == 0 {
 		return resolution{
 			status: "unknown",
-			reason: "docker hub did not return any parseable release tags",
+			reason: "registry did not return any parseable release tags",
 		}
 	}
 
@@ -160,7 +169,7 @@ func determineResolution(observation model.Observation, ref hubReference, tags [
 	if len(filtered) == 0 {
 		return resolution{
 			status: "unknown",
-			reason: "no docker hub tags matched the current version scheme with high confidence",
+			reason: "no registry tags matched the current version scheme with high confidence",
 		}
 	}
 
@@ -176,13 +185,27 @@ func determineResolution(observation model.Observation, ref hubReference, tags [
 
 	return resolution{
 		latestVersion:    latest.Raw,
-		latestVersionURL: buildLatestVersionURL(ref.Repository, latest.Raw),
+		latestVersionURL: buildLatestVersionURL(ref, latest.Raw),
 		status:           status,
 		update:           model.Bool(updateAvailable),
 	}
 }
 
-func buildLatestVersionURL(repository, tag string) string {
+func buildLatestVersionURL(ref registryReference, tag string) string {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return ""
+	}
+
+	switch ref.Kind {
+	case registryKindDockerHub:
+		return buildDockerHubLatestVersionURL(ref.Repository, tag)
+	default:
+		return ""
+	}
+}
+
+func buildDockerHubLatestVersionURL(repository, tag string) string {
 	repository = strings.TrimSpace(repository)
 	tag = strings.TrimSpace(tag)
 	if repository == "" || tag == "" {
@@ -215,38 +238,54 @@ func selectArtifactReference(observation model.Observation) string {
 	return observation.ArtifactName
 }
 
-func parseDockerHubReference(imageRef string) (hubReference, error) {
+func parseRegistryReference(imageRef string) (registryReference, error) {
 	imageRef = normalizeImageReference(imageRef)
 	if imageRef == "" {
-		return hubReference{}, fmt.Errorf("observation is missing artifact reference")
+		return registryReference{}, fmt.Errorf("observation is missing artifact reference")
 	}
 
-	parts := strings.Split(imageRef, "/")
-	if len(parts) > 1 && (strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":") || parts[0] == "localhost") {
-		switch parts[0] {
-		case "docker.io", "index.docker.io", "registry-1.docker.io":
-			repository := strings.Join(parts[1:], "/")
-			if repository == "" {
-				return hubReference{}, fmt.Errorf("docker hub image reference %q is missing a repository", imageRef)
-			}
-			return hubReference{
-				Repository: repository,
-				Display:    "docker.io/" + repository,
-			}, nil
-		default:
-			return hubReference{}, fmt.Errorf("docker_hub resolver only supports Docker Hub images")
-		}
+	host, repository := splitRegistryHost(imageRef)
+	kind, registryHost, apiBaseURL, err := resolveRegistryHost(host)
+	if err != nil {
+		return registryReference{}, err
 	}
-
-	repository := imageRef
-	if !strings.Contains(repository, "/") {
+	if repository == "" {
+		return registryReference{}, fmt.Errorf("image reference %q is missing a repository", imageRef)
+	}
+	if kind == registryKindDockerHub && !strings.Contains(repository, "/") {
 		repository = "library/" + repository
 	}
 
-	return hubReference{
+	return registryReference{
+		Kind:       kind,
+		Registry:   registryHost,
 		Repository: repository,
-		Display:    "docker.io/" + repository,
+		Display:    registryHost + "/" + repository,
+		APIBaseURL: apiBaseURL,
 	}, nil
+}
+
+func splitRegistryHost(imageRef string) (string, string) {
+	parts := strings.Split(imageRef, "/")
+	if len(parts) > 1 && isRegistryHost(parts[0]) {
+		return strings.ToLower(parts[0]), strings.Join(parts[1:], "/")
+	}
+	return "docker.io", imageRef
+}
+
+func isRegistryHost(value string) bool {
+	return strings.Contains(value, ".") || strings.Contains(value, ":") || value == "localhost"
+}
+
+func resolveRegistryHost(host string) (string, string, string, error) {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "", "docker.io", "index.docker.io", "registry-1.docker.io":
+		return registryKindDockerHub, "docker.io", "https://registry-1.docker.io", nil
+	case "ghcr.io":
+		return registryKindGHCR, "ghcr.io", "https://ghcr.io", nil
+	default:
+		return "", "", "", fmt.Errorf("docker resolver does not support registry %q", host)
+	}
 }
 
 func normalizeImageReference(value string) string {
@@ -302,13 +341,13 @@ func compareNumbers(left, right []int) int {
 	return 0
 }
 
-func (c *registryClient) listTags(ctx context.Context, ref hubReference) ([]string, error) {
+func (c *registryClient) listTags(ctx context.Context, ref registryReference) ([]string, error) {
 	token := ""
-	nextURL := fmt.Sprintf("https://registry-1.docker.io/v2/%s/tags/list?n=1000", ref.Repository)
+	nextURL := ref.APIBaseURL + "/v2/" + ref.Repository + "/tags/list?n=1000"
 	tagSet := map[string]struct{}{}
 
 	for nextURL != "" {
-		response, err := c.request(ctx, nextURL, token)
+		response, err := c.request(ctx, nextURL, token, ref.Registry)
 		if err != nil {
 			return nil, err
 		}
@@ -317,7 +356,7 @@ func (c *registryClient) listTags(ctx context.Context, ref hubReference) ([]stri
 			authHeader := response.Header.Get("WWW-Authenticate")
 			response.Body.Close()
 			if authHeader == "" {
-				return nil, fmt.Errorf("docker hub requested auth without a challenge header")
+				return nil, fmt.Errorf("%s requested auth without a challenge header", ref.Registry)
 			}
 			token, err = c.fetchToken(ctx, ref, authHeader)
 			if err != nil {
@@ -329,7 +368,7 @@ func (c *registryClient) listTags(ctx context.Context, ref hubReference) ([]stri
 		if response.StatusCode >= http.StatusBadRequest {
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
-			return nil, fmt.Errorf("docker hub returned %s: %s", response.Status, strings.TrimSpace(string(body)))
+			return nil, fmt.Errorf("%s returned %s: %s", ref.Registry, response.Status, strings.TrimSpace(string(body)))
 		}
 
 		var payload struct {
@@ -337,7 +376,7 @@ func (c *registryClient) listTags(ctx context.Context, ref hubReference) ([]stri
 		}
 		if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 			response.Body.Close()
-			return nil, fmt.Errorf("decode docker hub tags response: %w", err)
+			return nil, fmt.Errorf("decode %s tags response: %w", ref.Registry, err)
 		}
 		response.Body.Close()
 
@@ -345,7 +384,7 @@ func (c *registryClient) listTags(ctx context.Context, ref hubReference) ([]stri
 			tagSet[tag] = struct{}{}
 		}
 
-		nextURL = linkNextURL(response.Header.Get("Link"))
+		nextURL = linkNextURL(ref.APIBaseURL, response.Header.Get("Link"))
 	}
 
 	tags := make([]string, 0, len(tagSet))
@@ -356,16 +395,16 @@ func (c *registryClient) listTags(ctx context.Context, ref hubReference) ([]stri
 	return tags, nil
 }
 
-func (c *registryClient) fetchToken(ctx context.Context, ref hubReference, header string) (string, error) {
+func (c *registryClient) fetchToken(ctx context.Context, ref registryReference, header string) (string, error) {
 	params := parseBearerChallenge(header)
 	realm := params["realm"]
 	if realm == "" {
-		return "", fmt.Errorf("docker hub auth challenge is missing a realm")
+		return "", fmt.Errorf("%s auth challenge is missing a realm", ref.Registry)
 	}
 
 	tokenURL, err := url.Parse(realm)
 	if err != nil {
-		return "", fmt.Errorf("parse docker hub token url: %w", err)
+		return "", fmt.Errorf("parse %s token url: %w", ref.Registry, err)
 	}
 
 	query := tokenURL.Query()
@@ -379,7 +418,7 @@ func (c *registryClient) fetchToken(ctx context.Context, ref hubReference, heade
 	query.Set("scope", scope)
 	tokenURL.RawQuery = query.Encode()
 
-	response, err := c.request(ctx, tokenURL.String(), "")
+	response, err := c.request(ctx, tokenURL.String(), "", ref.Registry)
 	if err != nil {
 		return "", err
 	}
@@ -387,7 +426,7 @@ func (c *registryClient) fetchToken(ctx context.Context, ref hubReference, heade
 
 	if response.StatusCode >= http.StatusBadRequest {
 		body, _ := io.ReadAll(response.Body)
-		return "", fmt.Errorf("docker hub token endpoint returned %s: %s", response.Status, strings.TrimSpace(string(body)))
+		return "", fmt.Errorf("%s token endpoint returned %s: %s", ref.Registry, response.Status, strings.TrimSpace(string(body)))
 	}
 
 	var payload struct {
@@ -395,7 +434,7 @@ func (c *registryClient) fetchToken(ctx context.Context, ref hubReference, heade
 		AccessToken string `json:"access_token"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		return "", fmt.Errorf("decode docker hub token response: %w", err)
+		return "", fmt.Errorf("decode %s token response: %w", ref.Registry, err)
 	}
 	if payload.Token != "" {
 		return payload.Token, nil
@@ -403,13 +442,13 @@ func (c *registryClient) fetchToken(ctx context.Context, ref hubReference, heade
 	if payload.AccessToken != "" {
 		return payload.AccessToken, nil
 	}
-	return "", fmt.Errorf("docker hub token endpoint did not return a bearer token")
+	return "", fmt.Errorf("%s token endpoint did not return a bearer token", ref.Registry)
 }
 
-func (c *registryClient) request(ctx context.Context, rawURL, token string) (*http.Response, error) {
+func (c *registryClient) request(ctx context.Context, rawURL, token, registry string) (*http.Response, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("build docker hub request: %w", err)
+		return nil, fmt.Errorf("build %s request: %w", registry, err)
 	}
 	request.Header.Set("Accept", "application/json")
 	if token != "" {
@@ -418,7 +457,7 @@ func (c *registryClient) request(ctx context.Context, rawURL, token string) (*ht
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("request docker hub %q: %w", rawURL, err)
+		return nil, fmt.Errorf("request %s %q: %w", registry, rawURL, err)
 	}
 	return response, nil
 }
@@ -436,7 +475,7 @@ func parseBearerChallenge(header string) map[string]string {
 	return params
 }
 
-func linkNextURL(linkHeader string) string {
+func linkNextURL(baseURL, linkHeader string) string {
 	linkHeader = strings.TrimSpace(linkHeader)
 	if linkHeader == "" || !strings.Contains(linkHeader, ";") {
 		return ""
@@ -450,11 +489,18 @@ func linkNextURL(linkHeader string) string {
 	target := strings.TrimSpace(parts[0])
 	target = strings.TrimPrefix(target, "<")
 	target = strings.TrimSuffix(target, ">")
-	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
-		return target
+
+	targetURL, err := url.Parse(target)
+	if err != nil {
+		return ""
 	}
-	if strings.HasPrefix(target, "/") {
-		return "https://registry-1.docker.io" + target
+	if targetURL.IsAbs() {
+		return targetURL.String()
 	}
-	return "https://registry-1.docker.io/" + target
+
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return ""
+	}
+	return base.ResolveReference(targetURL).String()
 }

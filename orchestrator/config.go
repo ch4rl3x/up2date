@@ -116,7 +116,7 @@ func Load() (Config, error) {
 
 	switch cfg.Job.Resolver.Type {
 	case "brew_formula":
-	case "docker_hub":
+	case "docker", "docker_hub":
 	case "none":
 	default:
 		return Config{}, fmt.Errorf("unsupported resolver type %q", cfg.Job.Resolver.Type)
@@ -235,7 +235,7 @@ func resolveResolverType(explicit string, collector CollectorConfig) string {
 func defaultResolverTypeForCollector(collector CollectorConfig) string {
 	switch collector.Type {
 	case "docker":
-		return "docker_hub"
+		return "docker"
 	case "package":
 		switch normalizePackageManager(collector.Package.Manager) {
 		case "brew", "homebrew":

@@ -9,7 +9,7 @@ import (
 	"up2date/common/model"
 	mqttpublisher "up2date/publisher/mqtt"
 	brewformularesolver "up2date/resolver/brewformula"
-	dockerhubresolver "up2date/resolver/dockerhub"
+	dockerresolver "up2date/resolver/docker"
 	noneresolver "up2date/resolver/none"
 )
 
@@ -62,8 +62,8 @@ func buildResolver(cfg ResolverConfig) (Resolver, error) {
 	switch cfg.Type {
 	case "brew_formula":
 		return brewformularesolver.New(), nil
-	case "docker_hub":
-		return dockerhubresolver.New(), nil
+	case "docker", "docker_hub":
+		return dockerresolver.New(), nil
 	case "none":
 		return noneresolver.New(), nil
 	default:
