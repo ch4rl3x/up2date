@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"up2date/orchestrator"
@@ -17,14 +18,26 @@ func main() {
 
 func run() int {
 	var runOnce bool
+	var configPath string
 	flag.BoolVar(&runOnce, "once", false, "Run each configured job once and exit")
+	flag.StringVar(&configPath, "config", "", "Load configuration from file")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	cfg, err := orchestrator.Load()
+	configPath = firstNonEmpty(strings.TrimSpace(configPath), strings.TrimSpace(os.Getenv("UP2DATE_CONFIG_FILE")))
+
+	var (
+		cfg orchestrator.Config
+		err error
+	)
+	if configPath != "" {
+		cfg, err = orchestrator.LoadFromFile(configPath)
+	} else {
+		cfg, err = orchestrator.Load()
+	}
 	if err != nil {
-		logger.Error("failed to load environment config", "error", err)
+		logger.Error("failed to load config", "error", err)
 		return 1
 	}
 
@@ -43,4 +56,13 @@ func run() int {
 	}
 
 	return 0
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

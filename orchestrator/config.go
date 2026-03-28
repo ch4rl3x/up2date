@@ -61,12 +61,6 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("UP2DATE_COLLECTOR_TYPE is required")
 	}
 	resolverType := strings.TrimSpace(os.Getenv("UP2DATE_RESOLVER_TYPE"))
-	if resolverType == "" {
-		resolverType = defaultResolverTypeForCollector(collectorType)
-	}
-	if resolverType == "" {
-		return Config{}, fmt.Errorf("UP2DATE_RESOLVER_TYPE is required when collector %q has no default resolver", collectorType)
-	}
 
 	publisherType := strings.TrimSpace(os.Getenv("UP2DATE_PUBLISHER_TYPE"))
 	if publisherType == "" {
@@ -86,7 +80,6 @@ func Load() (Config, error) {
 			Name:      firstNonEmpty(strings.TrimSpace(os.Getenv("UP2DATE_JOB_NAME")), collectorType),
 			Interval:  interval,
 			Collector: CollectorConfig{Type: collectorType},
-			Resolver:  ResolverConfig{Type: resolverType},
 			Publisher: PublisherConfig{Type: publisherType},
 		},
 	}
@@ -116,12 +109,17 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("unsupported collector type %q", collectorType)
 	}
 
-	switch resolverType {
+	cfg.Job.Resolver.Type = resolveResolverType(resolverType, cfg.Job.Collector)
+	if cfg.Job.Resolver.Type == "" {
+		return Config{}, fmt.Errorf("could not derive resolver type for collector %q", collectorType)
+	}
+
+	switch cfg.Job.Resolver.Type {
 	case "brew_formula":
 	case "docker_hub":
 	case "none":
 	default:
-		return Config{}, fmt.Errorf("unsupported resolver type %q", resolverType)
+		return Config{}, fmt.Errorf("unsupported resolver type %q", cfg.Job.Resolver.Type)
 	}
 
 	switch publisherType {
@@ -226,13 +224,36 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func defaultResolverTypeForCollector(collectorType string) string {
-	switch collectorType {
+func resolveResolverType(explicit string, collector CollectorConfig) string {
+	value := strings.TrimSpace(strings.ToLower(explicit))
+	if value == "" || value == "auto" {
+		return defaultResolverTypeForCollector(collector)
+	}
+	return value
+}
+
+func defaultResolverTypeForCollector(collector CollectorConfig) string {
+	switch collector.Type {
 	case "docker":
 		return "docker_hub"
 	case "package":
-		return "none"
+		switch normalizePackageManager(collector.Package.Manager) {
+		case "brew", "homebrew":
+			return "brew_formula"
+		case "dpkg":
+			return "none"
+		default:
+			return ""
+		}
 	default:
 		return ""
 	}
+}
+
+func normalizePackageManager(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return "dpkg"
+	}
+	return value
 }

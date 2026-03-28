@@ -4,7 +4,7 @@
 
 Der Collector liefert die aktuellen Fakten eines Workloads, inklusive `artifact_name` und `artifact_ref`. Der Resolver arbeitet auf dem Referenzfeld und reichert nur um Upstream-Informationen an. Der Publisher published nur die bereits vorbereiteten Felder.
 
-Die Konfiguration passiert ausschliesslich ueber Umgebungsvariablen.
+Die Konfiguration kann ueber Umgebungsvariablen oder ueber eine einfache YAML-/JSON-Datei passieren.
 
 ## Nutzung mit Docker Compose
 
@@ -38,7 +38,6 @@ services:
       UP2DATE_INTERVAL: 1m
 
       UP2DATE_COLLECTOR_TYPE: docker
-      UP2DATE_RESOLVER_TYPE: docker_hub
 
       UP2DATE_PUBLISHER_TYPE: mqtt
       UP2DATE_PUBLISHER_MQTT_HOST: mqtt
@@ -52,20 +51,64 @@ Starten:
 docker compose up --build -d
 ```
 
+## Binary mit Config-Datei
+
+Fuer LXC-, VM- oder Bare-Metal-Installationen ist eine Datei meist angenehmer als viele einzelne Umgebungsvariablen.
+
+`up2date` unterstuetzt dafuer eine einfache YAML- oder JSON-Datei. Ein direkt nutzbares Beispiel fuer den bestehenden Package-Demo-Flow liegt unter [examples/package-brew-mqtt/config.yml](/Users/alex/Workspace/up2date/examples/package-brew-mqtt/config.yml).
+
+```yaml
+node_id: macbook-alex
+interval: 1m
+job_name: package
+
+collector:
+  type: package
+  package:
+    manager: brew
+    names:
+      - ripgrep
+
+publisher:
+  mqtt:
+    host: 127.0.0.1
+    port: 1883
+```
+
+Starten:
+
+```bash
+./up2date -config /etc/up2date/up2date.yaml
+```
+
+Oder per Pfad-Variable:
+
+```bash
+UP2DATE_CONFIG_FILE=/etc/up2date/up2date.yaml ./up2date
+```
+
+Der Resolver ist in Datei-Configs absichtlich nicht konfigurierbar. Er wird automatisch aus Collector und Paketmanager abgeleitet:
+
+- `docker` -> `docker_hub`
+- `package` + `brew` -> `brew_formula`
+- `package` + `dpkg` -> `none`
+
 ## Wichtige Variablen
 
 Allgemein:
 - `UP2DATE_NODE_ID`
 - `UP2DATE_INTERVAL`
+- `UP2DATE_CONFIG_FILE` optional, Alternative zu `-config /pfad/zur/datei`
 
 Collector:
 - `UP2DATE_COLLECTOR_TYPE`: `docker` oder `package`
 
 Resolver:
-- `UP2DATE_RESOLVER_TYPE`: `docker_hub`, `brew_formula` oder `none`
-- Default je Collector:
+- Resolver werden standardmaessig automatisch abgeleitet:
   - `docker` -> `docker_hub`
-  - `package` -> `none`
+  - `package` + `brew` -> `brew_formula`
+  - `package` + `dpkg` -> `none`
+- `UP2DATE_RESOLVER_TYPE` bleibt optional als explizite Env-Uebersteuerung fuer fortgeschrittene Faelle
 
 Collector `docker`:
 - `UP2DATE_COLLECTOR_DOCKER_INCLUDE_STOPPED`
@@ -137,7 +180,7 @@ Der `package`-Collector fragt dann lokal per `dpkg-query` ab und erzeugt eine Ob
 - `current_version_source = dpkg-query`
 - `observed_via = local_package_manager`
 
-Der Default-Resolver fuer `package` ist absichtlich `none`. Damit trennen wir die Frage "was ist installiert?" sauber von "was waere die passende neuere Version?".
+Fuer `dpkg` bleibt der automatisch abgeleitete Resolver absichtlich `none`. Damit trennen wir die Frage "was ist installiert?" sauber von "was waere die passende neuere Version?".
 
 Wenn `samba` nicht installiert ist, bleibt `current_version` leer. Das MQTT-Topic fuer `current_version` wird dadurch geloescht, waehrend `observed_at` und `check_status=unknown` weiter den aktuellen Beobachtungsstand zeigen.
 
@@ -178,11 +221,7 @@ Der Collector nutzt dann `brew info --formula --json=v2 <name>`. Die Observation
 - `current_version_source = brew info --json=v2`
 - `attributes.package_manager = brew`
 
-Wenn du nicht nur den Ist-Stand, sondern auch `latest_version` und `check_status=current|outdated` sehen willst, setze fuer Homebrew zusaetzlich:
-
-```bash
-UP2DATE_RESOLVER_TYPE=brew_formula
-```
+Der Resolver wird fuer Homebrew automatisch als `brew_formula` abgeleitet. Damit bekommst du ohne Zusatzkonfiguration auch `latest_version` und `check_status=current|outdated`.
 
 Falls `samba` auf deinem Mac nicht installiert ist, nimm fuer den ersten Test einfach eine vorhandene Formula wie `go`, `ripgrep` oder `python@3.12`.
 
@@ -191,6 +230,8 @@ Als direkt ausfuehrbares Beispiel liegt dafuer [examples/package-brew-mqtt/run.s
 ```bash
 ./examples/package-brew-mqtt/run.sh
 ```
+
+Das statische Beispiel-Config-File dazu liegt unter [examples/package-brew-mqtt/config.yml](/Users/alex/Workspace/up2date/examples/package-brew-mqtt/config.yml). `run.sh` startet nur den lokalen MQTT-Broker, baut `up2date` als Binary und ruft dieses Binary dann mit `-config` auf.
 
 Fuer Dauerlauf statt One-Shot:
 
@@ -207,6 +248,7 @@ Fuer Dauerlauf statt One-Shot:
 - Auf SELinux-Systemen kann bei Podman zusaetzlich `security_opt: [label=disable]` noetig sein.
 - Aktuell werden nur Docker-Hub-Images bewertet. Andere Registries landen derzeit als `unsupported`.
 - Der `package`-Collector unterstuetzt in der ersten Ausbaustufe `dpkg-query` und Homebrew `brew info --formula --json=v2`.
+- Datei-Configs unterstuetzen den einfachen YAML-/JSON-Stil aus den Beispielen, also verschachtelte Mappings und String-Listen.
 - Published werden nur die einzelnen Feldwerte pro Service.
 - `check_status` traegt das Resolver-Ergebnis wie `current`, `outdated`, `unsupported` oder `error`.
 - `artifact_name` ist ein vom Collector gelieferter, kurzer Anzeigename des Deployment-Artefakts, also z. B. `nginx`.

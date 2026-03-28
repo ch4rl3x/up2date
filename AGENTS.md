@@ -29,7 +29,10 @@ The current implementation is a single Go application with a simple pipeline:
 Current concrete modules:
 
 - `collector/docker`
+- `collector/ospackage`
+- `resolver/brewformula`
 - `resolver/dockerhub`
+- `resolver/none`
 - `publisher/mqtt`
 - `common/model`
 - `orchestrator`
@@ -41,8 +44,9 @@ That shape is intentional. New integrations should fit into that flow instead of
 The current MVP is intentionally narrow:
 
 - observe Docker workloads on a node
+- observe selected locally installed OS packages on a node
 - detect a current version or tag from the deployed artifact
-- resolve a newer relevant version from Docker Hub
+- resolve a newer relevant version from Docker Hub or, for Homebrew formulas, from Homebrew metadata
 - publish a small retained per-service MQTT contract
 - make the state easy to inspect in MQTT Explorer
 
@@ -194,6 +198,7 @@ Do not replace clean module boundaries with a giant if/else tree spread across t
 Optimize for these first:
 
 - Docker Engine collection
+- package-manager collection for `dpkg` and Homebrew
 - Compose-aware metadata extraction
 - stable MQTT per-service fields
 - retained MQTT state that is easy to inspect
@@ -205,7 +210,7 @@ Treat these as later additions:
 - SSH collectors
 - HTTP regex collectors
 - Proxmox-native inventory
-- package-manager integrations
+- additional package-manager integrations beyond `dpkg` and Homebrew
 - notifications
 - automated update workflows
 

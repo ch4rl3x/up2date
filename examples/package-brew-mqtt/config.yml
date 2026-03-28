@@ -1,0 +1,15 @@
+node_id: macbook-alex
+interval: 1m
+job_name: package
+
+collector:
+  type: package
+  package:
+    manager: brew
+    names:
+      - gettext
+
+publisher:
+  mqtt:
+    host: 127.0.0.1
+    port: 1883

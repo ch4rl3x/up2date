@@ -1,17 +1,13 @@
 # package-brew-mqtt
 
-Startet einen lokalen MQTT-Broker per Compose und fuehrt `up2date` danach auf macOS mit Homebrew-Collector und `brew_formula`-Resolver aus.
+Startet einen lokalen MQTT-Broker per Compose, baut `up2date` lokal als Binary und startet dieses Binary danach auf macOS mit Homebrew-Collector und statischer `config.yml`. Der Resolver wird automatisch als `brew_formula` abgeleitet.
+
+Das eingecheckte Beispiel-Config-File liegt unter [config.yml](/Users/alex/Workspace/up2date/examples/package-brew-mqtt/config.yml).
 
 Standard:
 
 ```bash
 ./examples/package-brew-mqtt/run.sh
-```
-
-Mit explizitem Paket:
-
-```bash
-UP2DATE_COLLECTOR_PACKAGE_NAMES=samba ./examples/package-brew-mqtt/run.sh
 ```
 
 Dauerlauf statt One-Shot:
