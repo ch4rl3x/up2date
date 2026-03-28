@@ -72,10 +72,11 @@ func (r *Resolver) Resolve(ctx context.Context, snapshot model.Snapshot) ([]mode
 
 	for _, observation := range snapshot.Observations {
 		check := model.NewCheckResult(snapshot, observation, "docker")
-		currentVersion := selectCurrentVersion(observation)
-		if currentVersion != "" {
-			check.CurrentVersion = currentVersion
+		reportedCurrentVersion := selectReportedCurrentVersion(observation)
+		if reportedCurrentVersion != "" {
+			check.CurrentVersion = reportedCurrentVersion
 		}
+		comparisonVersion := selectComparisonVersion(observation)
 
 		ref, err := parseRegistryReference(selectArtifactReference(observation))
 		if err != nil {
@@ -85,7 +86,7 @@ func (r *Resolver) Resolve(ctx context.Context, snapshot model.Snapshot) ([]mode
 			continue
 		}
 
-		if parseVersion(currentVersion) == nil {
+		if parseVersion(comparisonVersion) == nil {
 			check.CheckStatus = "unsupported"
 			check.Reason = "current version is not parseable as a numeric release tag"
 			results = append(results, check)
@@ -123,7 +124,7 @@ func (r *Resolver) Resolve(ctx context.Context, snapshot model.Snapshot) ([]mode
 }
 
 func determineResolution(observation model.Observation, ref registryReference, tags []string) resolution {
-	currentVersion := selectCurrentVersion(observation)
+	currentVersion := selectComparisonVersion(observation)
 	parsedCurrent := parseVersion(currentVersion)
 	if parsedCurrent == nil {
 		return resolution{
@@ -217,7 +218,7 @@ func buildDockerHubLatestVersionURL(repository, tag string) string {
 	return "https://hub.docker.com/r/" + repository + "/tags?name=" + url.QueryEscape(tag)
 }
 
-func selectCurrentVersion(observation model.Observation) string {
+func selectReportedCurrentVersion(observation model.Observation) string {
 	if parseVersion(observation.CurrentVersion) != nil {
 		return observation.CurrentVersion
 	}
@@ -229,6 +230,14 @@ func selectCurrentVersion(observation model.Observation) string {
 		return observation.CurrentVersion
 	}
 	return imageTag
+}
+
+func selectComparisonVersion(observation model.Observation) string {
+	imageTag := strings.TrimSpace(observation.Attributes["image_tag"])
+	if imageTag != "" {
+		return imageTag
+	}
+	return strings.TrimSpace(observation.CurrentVersion)
 }
 
 func selectArtifactReference(observation model.Observation) string {

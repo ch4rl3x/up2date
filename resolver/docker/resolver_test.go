@@ -116,6 +116,42 @@ func TestBuildLatestVersionURL(t *testing.T) {
 	}
 }
 
+func TestDetermineResolutionPrefersDeployedImageTagOverContainerLabel(t *testing.T) {
+	observation := model.Observation{
+		ServiceName:    "mosquitto",
+		ArtifactName:   "eclipse-mosquitto",
+		ArtifactRef:    "docker.io/eclipse-mosquitto:2.1.2-alpine",
+		CurrentVersion: "2.0.22",
+		ObservedVia:    "docker_socket",
+		Attributes: map[string]string{
+			"image_tag":         "2.1.2-alpine",
+			"version_label_key": "org.opencontainers.image.version",
+			"container_name":    "mosquitto",
+		},
+	}
+	ref := registryReference{
+		Kind:       registryKindDockerHub,
+		Registry:   "docker.io",
+		Repository: "eclipse-mosquitto",
+	}
+
+	result := determineResolution(observation, ref, []string{
+		"2.0.22",
+		"2.1.2-alpine",
+		"2.1.3-alpine",
+	})
+
+	if result.status != "outdated" {
+		t.Fatalf("status = %q, want outdated", result.status)
+	}
+	if result.latestVersion != "2.1.3-alpine" {
+		t.Fatalf("latest version = %q, want 2.1.3-alpine", result.latestVersion)
+	}
+	if result.update == nil || !*result.update {
+		t.Fatalf("update available = %#v, want true", result.update)
+	}
+}
+
 func TestRegistryClientListTagsHandlesBearerChallengeAndPagination(t *testing.T) {
 	tokenRequests := 0
 	tagRequests := 0
