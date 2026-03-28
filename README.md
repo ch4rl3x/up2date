@@ -23,15 +23,10 @@ Wenn du die Anwendung in deine eigene Compose-Datei uebernimmst, reicht dieser D
 
 ```yaml
 services:
-  mqtt:
-    image: eclipse-mosquitto:2
-    ports:
-      - "1883:1883"
-
+  ...
+  
   up2date:
     build: .
-    depends_on:
-      - mqtt
     restart: unless-stopped
     environment:
       UP2DATE_NODE_ID: docker-host-01
@@ -40,7 +35,7 @@ services:
       UP2DATE_COLLECTOR_TYPE: docker
 
       UP2DATE_PUBLISHER_TYPE: mqtt
-      UP2DATE_PUBLISHER_MQTT_HOST: mqtt
+      UP2DATE_PUBLISHER_MQTT_HOST: MQTT_HOST
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 ```
@@ -58,21 +53,20 @@ Fuer LXC-, VM- oder Bare-Metal-Installationen ist eine Datei meist angenehmer al
 `up2date` unterstuetzt dafuer eine einfache YAML- oder JSON-Datei. Ein direkt nutzbares Beispiel fuer den bestehenden Package-Demo-Flow liegt unter [examples/package-brew-mqtt/config.yml](/Users/alex/Workspace/up2date/examples/package-brew-mqtt/config.yml).
 
 ```yaml
-node_id: macbook-alex
+node_id: my-device
 interval: 1m
 job_name: package
 
 collector:
   type: package
   package:
-    manager: brew
+    manager: dpkg
     names:
-      - ripgrep
+      - samba
 
 publisher:
   mqtt:
-    host: 127.0.0.1
-    port: 1883
+    host: MQTT_HOST
 ```
 
 Starten:
@@ -204,11 +198,11 @@ fehlendes Paket wird als Observation ohne `current_version` sichtbar; fehlendes 
 Zum lokalen Testen auf macOS ist Homebrew der richtige erste Package-Manager. Dafuer setzt du:
 
 ```bash
-UP2DATE_NODE_ID=macbook-alex
+UP2DATE_NODE_ID=my-device
 UP2DATE_INTERVAL=1m
 
 UP2DATE_COLLECTOR_TYPE=package
-UP2DATE_COLLECTOR_PACKAGE_MANAGER=brew
+UP2DATE_COLLECTOR_PACKAGE_MANAGER=MQTT_HOST
 UP2DATE_COLLECTOR_PACKAGE_NAMES=samba
 
 UP2DATE_PUBLISHER_TYPE=mqtt
