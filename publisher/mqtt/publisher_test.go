@@ -53,3 +53,58 @@ func TestPublisherNewHomeAssistantConfig(t *testing.T) {
 	}
 }
 
+func TestHomeAssistantDiscoveryEntityNaming(t *testing.T) {
+	check := model.CheckResult{
+		NodeID:       "authentik",
+		ServiceName:  "postgresql",
+		ArtifactName: "postgresql",
+	}
+
+	title := check.ArtifactName
+	if title == "" {
+		title = check.ServiceName
+	}
+
+	updateConfig := haUpdateConfig{
+		Name:       title + " Update",
+		Title:      title,
+		StateTopic: "up2date/authentik/postgresql/current_version",
+	}
+
+	sensorConfig := haSensorConfig{
+		Name: title + " Check Status",
+		Icon: "mdi:shield-search",
+	}
+
+	currentVersionConfig := haSensorConfig{
+		Name:       title + " Current Version",
+		StateTopic: "up2date/authentik/postgresql/current_version",
+		Icon:       "mdi:tag-outline",
+	}
+
+	latestVersionConfig := haSensorConfig{
+		Name:       title + " Latest Version",
+		StateTopic: "up2date/authentik/postgresql/latest_version",
+		Icon:       "mdi:tag-arrow-up-outline",
+	}
+
+	if updateConfig.Name != "postgresql Update" {
+		t.Errorf("updateConfig.Name = %q, want %q", updateConfig.Name, "postgresql Update")
+	}
+	if updateConfig.StateTopic != "up2date/authentik/postgresql/current_version" {
+		t.Errorf("updateConfig.StateTopic = %q, want %q", updateConfig.StateTopic, "up2date/authentik/postgresql/current_version")
+	}
+	if sensorConfig.Name != "postgresql Check Status" {
+		t.Errorf("sensorConfig.Name = %q, want %q", sensorConfig.Name, "postgresql Check Status")
+	}
+	if sensorConfig.Icon != "mdi:shield-search" {
+		t.Errorf("sensorConfig.Icon = %q, want %q", sensorConfig.Icon, "mdi:shield-search")
+	}
+	if currentVersionConfig.Name != "postgresql Current Version" {
+		t.Errorf("currentVersionConfig.Name = %q, want %q", currentVersionConfig.Name, "postgresql Current Version")
+	}
+	if latestVersionConfig.Name != "postgresql Latest Version" {
+		t.Errorf("latestVersionConfig.Name = %q, want %q", latestVersionConfig.Name, "postgresql Latest Version")
+	}
+}
+
