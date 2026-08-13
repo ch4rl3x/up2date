@@ -64,15 +64,15 @@ type haDevice struct {
 }
 
 type haUpdateConfig struct {
-	Name                  string   `json:"name"`
-	Title                 string   `json:"title,omitempty"`
-	UniqueID              string   `json:"unique_id"`
-	ObjectID              string   `json:"object_id"`
-	InstalledVersionTopic string   `json:"installed_version_topic"`
-	LatestVersionTopic    string   `json:"latest_version_topic"`
-	ReleaseURLTopic       string   `json:"release_url_topic,omitempty"`
-	EntityCategory        string   `json:"entity_category,omitempty"`
-	Device                haDevice `json:"device"`
+	Name               string   `json:"name"`
+	Title              string   `json:"title,omitempty"`
+	UniqueID           string   `json:"unique_id"`
+	ObjectID           string   `json:"object_id"`
+	StateTopic         string   `json:"state_topic"`
+	LatestVersionTopic string   `json:"latest_version_topic"`
+	ReleaseURLTopic    string   `json:"release_url_topic,omitempty"`
+	EntityCategory     string   `json:"entity_category,omitempty"`
+	Device             haDevice `json:"device"`
 }
 
 type haSensorConfig struct {
@@ -194,7 +194,7 @@ func (o *Publisher) publishHomeAssistantDiscovery(ctx context.Context, client *C
 
 	device := haDevice{
 		Identifiers:  []string{fmt.Sprintf("up2date_%s", sanitizedNodeID)},
-		Name:         fmt.Sprintf("Node %s", check.NodeID),
+		Name:         check.NodeID,
 		Manufacturer: "up2date",
 		Model:        "up2date Agent",
 	}
@@ -206,15 +206,14 @@ func (o *Publisher) publishHomeAssistantDiscovery(ctx context.Context, client *C
 
 	// 1. Update entity config
 	updateConfig := haUpdateConfig{
-		Name:                  "Update",
-		Title:                 title,
-		UniqueID:              fmt.Sprintf("up2date_%s_%s_update", sanitizedNodeID, sanitizedServiceName),
-		ObjectID:              fmt.Sprintf("%s_%s_update", sanitizedNodeID, sanitizedServiceName),
-		InstalledVersionTopic: o.fieldTopic(check.NodeID, check.ServiceName, "current_version"),
-		LatestVersionTopic:    o.fieldTopic(check.NodeID, check.ServiceName, "latest_version"),
-		ReleaseURLTopic:       o.fieldTopic(check.NodeID, check.ServiceName, "latest_version_url"),
-		EntityCategory:        "diagnostic",
-		Device:                device,
+		Name:               fmt.Sprintf("%s Update", title),
+		Title:              title,
+		UniqueID:           fmt.Sprintf("up2date_%s_%s_update", sanitizedNodeID, sanitizedServiceName),
+		ObjectID:           fmt.Sprintf("%s_%s_update", sanitizedNodeID, sanitizedServiceName),
+		StateTopic:         o.fieldTopic(check.NodeID, check.ServiceName, "current_version"),
+		LatestVersionTopic: o.fieldTopic(check.NodeID, check.ServiceName, "latest_version"),
+		ReleaseURLTopic:    o.fieldTopic(check.NodeID, check.ServiceName, "latest_version_url"),
+		Device:             device,
 	}
 
 	updatePayload, err := json.Marshal(updateConfig)
@@ -229,11 +228,11 @@ func (o *Publisher) publishHomeAssistantDiscovery(ctx context.Context, client *C
 
 	// 2. Check status sensor config
 	sensorConfig := haSensorConfig{
-		Name:           "Check Status",
+		Name:           fmt.Sprintf("%s Check Status", title),
 		UniqueID:       fmt.Sprintf("up2date_%s_%s_check_status", sanitizedNodeID, sanitizedServiceName),
 		ObjectID:       fmt.Sprintf("%s_%s_check_status", sanitizedNodeID, sanitizedServiceName),
 		StateTopic:     o.fieldTopic(check.NodeID, check.ServiceName, "check_status"),
-		Icon:           "mdi:shield-check",
+		Icon:           "mdi:shield-search",
 		EntityCategory: "diagnostic",
 		Device:         device,
 	}
@@ -246,6 +245,48 @@ func (o *Publisher) publishHomeAssistantDiscovery(ctx context.Context, client *C
 	sensorTopic := fmt.Sprintf("%s/sensor/%s_%s_check_status/config", o.haDiscoveryPrefix, sanitizedNodeID, sanitizedServiceName)
 	if err := client.Publish(ctx, sensorTopic, sensorPayload, true); err != nil {
 		return fmt.Errorf("publish home assistant sensor discovery: %w", err)
+	}
+
+	// 3. Current version sensor config
+	currentVersionConfig := haSensorConfig{
+		Name:           fmt.Sprintf("%s Current Version", title),
+		UniqueID:       fmt.Sprintf("up2date_%s_%s_current_version", sanitizedNodeID, sanitizedServiceName),
+		ObjectID:       fmt.Sprintf("%s_%s_current_version", sanitizedNodeID, sanitizedServiceName),
+		StateTopic:     o.fieldTopic(check.NodeID, check.ServiceName, "current_version"),
+		Icon:           "mdi:tag-outline",
+		EntityCategory: "diagnostic",
+		Device:         device,
+	}
+
+	currentVersionPayload, err := json.Marshal(currentVersionConfig)
+	if err != nil {
+		return fmt.Errorf("marshal home assistant current version sensor config: %w", err)
+	}
+
+	currentVersionTopic := fmt.Sprintf("%s/sensor/%s_%s_current_version/config", o.haDiscoveryPrefix, sanitizedNodeID, sanitizedServiceName)
+	if err := client.Publish(ctx, currentVersionTopic, currentVersionPayload, true); err != nil {
+		return fmt.Errorf("publish home assistant current version sensor discovery: %w", err)
+	}
+
+	// 4. Latest version sensor config
+	latestVersionConfig := haSensorConfig{
+		Name:           fmt.Sprintf("%s Latest Version", title),
+		UniqueID:       fmt.Sprintf("up2date_%s_%s_latest_version", sanitizedNodeID, sanitizedServiceName),
+		ObjectID:       fmt.Sprintf("%s_%s_latest_version", sanitizedNodeID, sanitizedServiceName),
+		StateTopic:     o.fieldTopic(check.NodeID, check.ServiceName, "latest_version"),
+		Icon:           "mdi:tag-arrow-up-outline",
+		EntityCategory: "diagnostic",
+		Device:         device,
+	}
+
+	latestVersionPayload, err := json.Marshal(latestVersionConfig)
+	if err != nil {
+		return fmt.Errorf("marshal home assistant latest version sensor config: %w", err)
+	}
+
+	latestVersionTopic := fmt.Sprintf("%s/sensor/%s_%s_latest_version/config", o.haDiscoveryPrefix, sanitizedNodeID, sanitizedServiceName)
+	if err := client.Publish(ctx, latestVersionTopic, latestVersionPayload, true); err != nil {
+		return fmt.Errorf("publish home assistant latest version sensor discovery: %w", err)
 	}
 
 	return nil

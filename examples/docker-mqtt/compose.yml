@@ -25,6 +25,7 @@ services:
       UP2DATE_COLLECTOR_TYPE: docker
       UP2DATE_PUBLISHER_TYPE: mqtt
       UP2DATE_PUBLISHER_MQTT_HOST: mqtt
+      UP2DATE_PUBLISHER_MQTT_HOMEASSISTANT_ENABLED: "true"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     security_opt:

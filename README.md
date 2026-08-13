@@ -197,8 +197,10 @@ Wenn Home Assistant Discovery aktiviert ist (`UP2DATE_PUBLISHER_MQTT_HOMEASSISTA
 
 - Update-Entität: `<discovery_prefix>/update/<node_id>_<service_name>/config`
 - Check-Status-Sensor: `<discovery_prefix>/sensor/<node_id>_<service_name>_check_status/config`
+- Current-Version-Sensor: `<discovery_prefix>/sensor/<node_id>_<service_name>_current_version/config`
+- Latest-Version-Sensor: `<discovery_prefix>/sensor/<node_id>_<service_name>_latest_version/config`
 
-In Home Assistant werden dadurch automatisch alle Dienste eines Nodes unter einem gemeinsamen Device (`Node <node_id>`) angelegt. Die Update-Entität nutzt dabei nativ die `current_version`-, `latest_version`- und `latest_version_url`-Topics.
+In Home Assistant werden dadurch automatisch alle Dienste eines Nodes unter einem gemeinsamen Device (`<node_id>`) angelegt. Die Update-Entität nutzt dabei nativ die `current_version`-, `latest_version`- und `latest_version_url`-Topics, und die Versionen stehen zusätzlich als eigenständige Sensoren bereit.
 
 In Config-Dateien (`YAML`/`JSON`):
 
