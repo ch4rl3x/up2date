@@ -215,3 +215,98 @@ publisher:
 		t.Fatalf("error = %q, want resolver rejection", err)
 	}
 }
+
+func TestLoadHomeAssistantFromEnv(t *testing.T) {
+	t.Setenv("UP2DATE_NODE_ID", "docker-host-01")
+	t.Setenv("UP2DATE_COLLECTOR_TYPE", "docker")
+	t.Setenv("UP2DATE_PUBLISHER_TYPE", "mqtt")
+	t.Setenv("UP2DATE_PUBLISHER_MQTT_HOST", "mqtt")
+	t.Setenv("UP2DATE_PUBLISHER_MQTT_HOMEASSISTANT_ENABLED", "true")
+	t.Setenv("UP2DATE_PUBLISHER_MQTT_HOMEASSISTANT_DISCOVERY_PREFIX", "homeassistant_custom")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	ha := cfg.Job.Publisher.MQTT.HomeAssistant
+	if ha == nil {
+		t.Fatal("HomeAssistant config is nil, want non-nil")
+	}
+	if !ha.Enabled {
+		t.Fatal("HomeAssistant.Enabled = false, want true")
+	}
+	if ha.DiscoveryPrefix != "homeassistant_custom" {
+		t.Fatalf("HomeAssistant.DiscoveryPrefix = %q, want homeassistant_custom", ha.DiscoveryPrefix)
+	}
+}
+
+func TestLoadFromFileHomeAssistantConfig(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "up2date.yaml")
+	config := strings.TrimSpace(`
+node_id: docker-host-01
+
+collector:
+  type: docker
+
+publisher:
+  mqtt:
+    host: mqtt
+    homeassistant:
+      enabled: true
+      discovery_prefix: ha_prefix
+`)
+
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatalf("WriteFile() returned error: %v", err)
+	}
+
+	cfg, err := LoadFromFile(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromFile() returned error: %v", err)
+	}
+
+	ha := cfg.Job.Publisher.MQTT.HomeAssistant
+	if ha == nil {
+		t.Fatal("HomeAssistant config is nil, want non-nil")
+	}
+	if !ha.Enabled {
+		t.Fatal("HomeAssistant.Enabled = false, want true")
+	}
+	if ha.DiscoveryPrefix != "ha_prefix" {
+		t.Fatalf("HomeAssistant.DiscoveryPrefix = %q, want ha_prefix", ha.DiscoveryPrefix)
+	}
+}
+
+func TestLoadFromFileHomeAssistantBooleanShorthand(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "up2date.yaml")
+	config := strings.TrimSpace(`
+node_id: docker-host-01
+
+collector:
+  type: docker
+
+publisher:
+  mqtt:
+    host: mqtt
+    homeassistant: true
+`)
+
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatalf("WriteFile() returned error: %v", err)
+	}
+
+	cfg, err := LoadFromFile(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromFile() returned error: %v", err)
+	}
+
+	ha := cfg.Job.Publisher.MQTT.HomeAssistant
+	if ha == nil {
+		t.Fatal("HomeAssistant config is nil, want non-nil")
+	}
+	if !ha.Enabled {
+		t.Fatal("HomeAssistant.Enabled = false, want true")
+	}
+}
+

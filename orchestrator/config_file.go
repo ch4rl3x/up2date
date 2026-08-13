@@ -188,7 +188,7 @@ func buildConfigFromDocument(root map[string]any) (Config, error) {
 		if !ok {
 			return Config{}, fmt.Errorf("config.publisher.mqtt is required when publisher.type is %q", publisherType)
 		}
-		if err := validateKeys(mqttMap, "config.publisher.mqtt", "client_id_prefix", "connect_timeout", "host", "password", "port", "retain", "topic_prefix", "username"); err != nil {
+		if err := validateKeys(mqttMap, "config.publisher.mqtt", "client_id_prefix", "connect_timeout", "host", "homeassistant", "password", "port", "retain", "topic_prefix", "username"); err != nil {
 			return Config{}, err
 		}
 
@@ -225,6 +225,46 @@ func buildConfigFromDocument(root map[string]any) (Config, error) {
 			return Config{}, err
 		}
 
+		var haCfg *mqttpublisher.HomeAssistantConfig
+		if rawHA, ok := mqttMap["homeassistant"]; ok {
+			switch typed := rawHA.(type) {
+			case bool:
+				haCfg = &mqttpublisher.HomeAssistantConfig{
+					Enabled: typed,
+				}
+			case string:
+				enabled, err := parseBooleanValue(typed, "config.publisher.mqtt.homeassistant")
+				if err != nil {
+					return Config{}, err
+				}
+				haCfg = &mqttpublisher.HomeAssistantConfig{
+					Enabled: enabled,
+				}
+			case map[string]any:
+				if err := validateKeys(typed, "config.publisher.mqtt.homeassistant", "discovery_prefix", "enabled"); err != nil {
+					return Config{}, err
+				}
+				enabled, err := optionalBoolPointerValue(typed, "enabled", "config.publisher.mqtt.homeassistant.enabled")
+				if err != nil {
+					return Config{}, err
+				}
+				discoveryPrefix, _, err := optionalStringValue(typed, "discovery_prefix", "config.publisher.mqtt.homeassistant.discovery_prefix")
+				if err != nil {
+					return Config{}, err
+				}
+				haEnabled := false
+				if enabled != nil {
+					haEnabled = *enabled
+				}
+				haCfg = &mqttpublisher.HomeAssistantConfig{
+					Enabled:         haEnabled,
+					DiscoveryPrefix: discoveryPrefix,
+				}
+			default:
+				return Config{}, fmt.Errorf("config.publisher.mqtt.homeassistant must be a boolean or a mapping")
+			}
+		}
+
 		cfg.Job.Publisher.MQTT = mqttpublisher.Config{
 			Host:           host,
 			Port:           port,
@@ -234,6 +274,7 @@ func buildConfigFromDocument(root map[string]any) (Config, error) {
 			ClientIDPrefix: clientIDPrefix,
 			ConnectTimeout: connectTimeout,
 			Retain:         retain,
+			HomeAssistant:  haCfg,
 		}
 
 	default:

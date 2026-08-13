@@ -2,6 +2,7 @@ package mqtt
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -11,39 +12,77 @@ import (
 )
 
 const (
-	defaultPort        = 1883
-	defaultTopicPrefix = "up2date"
-	defaultClientID    = "up2date"
-	defaultTimeout     = 10 * time.Second
+	defaultPort              = 1883
+	defaultTopicPrefix       = "up2date"
+	defaultClientID          = "up2date"
+	defaultTimeout           = 10 * time.Second
+	defaultHADiscoveryPrefix = "homeassistant"
 )
 
 var topicSegmentRe = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
+type HomeAssistantConfig struct {
+	Enabled         bool   `json:"enabled,omitempty"`
+	DiscoveryPrefix string `json:"discovery_prefix,omitempty"`
+}
+
 type Config struct {
-	Host           string `json:"host"`
-	Port           int    `json:"port,omitempty"`
-	Username       string `json:"username,omitempty"`
-	Password       string `json:"password,omitempty"`
-	TopicPrefix    string `json:"topic_prefix,omitempty"`
-	ClientIDPrefix string `json:"client_id_prefix,omitempty"`
-	ConnectTimeout string `json:"connect_timeout,omitempty"`
-	Retain         *bool  `json:"retain,omitempty"`
+	Host           string               `json:"host"`
+	Port           int                  `json:"port,omitempty"`
+	Username       string               `json:"username,omitempty"`
+	Password       string               `json:"password,omitempty"`
+	TopicPrefix    string               `json:"topic_prefix,omitempty"`
+	ClientIDPrefix string               `json:"client_id_prefix,omitempty"`
+	ConnectTimeout string               `json:"connect_timeout,omitempty"`
+	Retain         *bool                `json:"retain,omitempty"`
+	HomeAssistant  *HomeAssistantConfig `json:"homeassistant,omitempty"`
 }
 
 type Publisher struct {
-	host           string
-	port           int
-	username       string
-	password       string
-	topicPrefix    string
-	clientIDPrefix string
-	connectTimeout time.Duration
-	retain         bool
+	host              string
+	port              int
+	username          string
+	password          string
+	topicPrefix       string
+	clientIDPrefix    string
+	connectTimeout    time.Duration
+	retain            bool
+	haEnabled         bool
+	haDiscoveryPrefix string
 }
 
 type publishedField struct {
 	name  string
 	value string
+}
+
+type haDevice struct {
+	Identifiers  []string `json:"identifiers"`
+	Name         string   `json:"name"`
+	Manufacturer string   `json:"manufacturer"`
+	Model        string   `json:"model"`
+}
+
+type haUpdateConfig struct {
+	Name                  string   `json:"name"`
+	Title                 string   `json:"title,omitempty"`
+	UniqueID              string   `json:"unique_id"`
+	ObjectID              string   `json:"object_id"`
+	InstalledVersionTopic string   `json:"installed_version_topic"`
+	LatestVersionTopic    string   `json:"latest_version_topic"`
+	ReleaseURLTopic       string   `json:"release_url_topic,omitempty"`
+	EntityCategory        string   `json:"entity_category,omitempty"`
+	Device                haDevice `json:"device"`
+}
+
+type haSensorConfig struct {
+	Name           string   `json:"name"`
+	UniqueID       string   `json:"unique_id"`
+	ObjectID       string   `json:"object_id"`
+	StateTopic     string   `json:"state_topic"`
+	Icon           string   `json:"icon,omitempty"`
+	EntityCategory string   `json:"entity_category,omitempty"`
+	Device         haDevice `json:"device"`
 }
 
 func New(cfg Config) (*Publisher, error) {
@@ -86,15 +125,26 @@ func New(cfg Config) (*Publisher, error) {
 		retain = *cfg.Retain
 	}
 
+	haEnabled := false
+	haDiscoveryPrefix := defaultHADiscoveryPrefix
+	if cfg.HomeAssistant != nil {
+		haEnabled = cfg.HomeAssistant.Enabled
+		if cfg.HomeAssistant.DiscoveryPrefix != "" {
+			haDiscoveryPrefix = cfg.HomeAssistant.DiscoveryPrefix
+		}
+	}
+
 	return &Publisher{
-		host:           cfg.Host,
-		port:           port,
-		username:       cfg.Username,
-		password:       cfg.Password,
-		topicPrefix:    topicPrefix,
-		clientIDPrefix: clientIDPrefix,
-		connectTimeout: connectTimeout,
-		retain:         retain,
+		host:              cfg.Host,
+		port:              port,
+		username:          cfg.Username,
+		password:          cfg.Password,
+		topicPrefix:       topicPrefix,
+		clientIDPrefix:    clientIDPrefix,
+		connectTimeout:    connectTimeout,
+		retain:            retain,
+		haEnabled:         haEnabled,
+		haDiscoveryPrefix: haDiscoveryPrefix,
 	}, nil
 }
 
@@ -116,6 +166,12 @@ func (o *Publisher) Publish(ctx context.Context, checks []model.CheckResult) err
 				return err
 			}
 		}
+
+		if o.haEnabled {
+			if err := o.publishHomeAssistantDiscovery(ctx, client, check); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -130,6 +186,69 @@ func publishedFields(check model.CheckResult) []publishedField {
 		{name: "observed_at", value: check.ObservedAt},
 		{name: "check_status", value: check.CheckStatus},
 	}
+}
+
+func (o *Publisher) publishHomeAssistantDiscovery(ctx context.Context, client *Client, check model.CheckResult) error {
+	sanitizedNodeID := sanitizeTopicSegment(check.NodeID)
+	sanitizedServiceName := sanitizeTopicSegment(check.ServiceName)
+
+	device := haDevice{
+		Identifiers:  []string{fmt.Sprintf("up2date_%s", sanitizedNodeID)},
+		Name:         fmt.Sprintf("Node %s", check.NodeID),
+		Manufacturer: "up2date",
+		Model:        "up2date Agent",
+	}
+
+	title := check.ArtifactName
+	if title == "" {
+		title = check.ServiceName
+	}
+
+	// 1. Update entity config
+	updateConfig := haUpdateConfig{
+		Name:                  "Update",
+		Title:                 title,
+		UniqueID:              fmt.Sprintf("up2date_%s_%s_update", sanitizedNodeID, sanitizedServiceName),
+		ObjectID:              fmt.Sprintf("%s_%s_update", sanitizedNodeID, sanitizedServiceName),
+		InstalledVersionTopic: o.fieldTopic(check.NodeID, check.ServiceName, "current_version"),
+		LatestVersionTopic:    o.fieldTopic(check.NodeID, check.ServiceName, "latest_version"),
+		ReleaseURLTopic:       o.fieldTopic(check.NodeID, check.ServiceName, "latest_version_url"),
+		EntityCategory:        "diagnostic",
+		Device:                device,
+	}
+
+	updatePayload, err := json.Marshal(updateConfig)
+	if err != nil {
+		return fmt.Errorf("marshal home assistant update config: %w", err)
+	}
+
+	updateTopic := fmt.Sprintf("%s/update/%s_%s/config", o.haDiscoveryPrefix, sanitizedNodeID, sanitizedServiceName)
+	if err := client.Publish(ctx, updateTopic, updatePayload, true); err != nil {
+		return fmt.Errorf("publish home assistant update discovery: %w", err)
+	}
+
+	// 2. Check status sensor config
+	sensorConfig := haSensorConfig{
+		Name:           "Check Status",
+		UniqueID:       fmt.Sprintf("up2date_%s_%s_check_status", sanitizedNodeID, sanitizedServiceName),
+		ObjectID:       fmt.Sprintf("%s_%s_check_status", sanitizedNodeID, sanitizedServiceName),
+		StateTopic:     o.fieldTopic(check.NodeID, check.ServiceName, "check_status"),
+		Icon:           "mdi:shield-check",
+		EntityCategory: "diagnostic",
+		Device:         device,
+	}
+
+	sensorPayload, err := json.Marshal(sensorConfig)
+	if err != nil {
+		return fmt.Errorf("marshal home assistant sensor config: %w", err)
+	}
+
+	sensorTopic := fmt.Sprintf("%s/sensor/%s_%s_check_status/config", o.haDiscoveryPrefix, sanitizedNodeID, sanitizedServiceName)
+	if err := client.Publish(ctx, sensorTopic, sensorPayload, true); err != nil {
+		return fmt.Errorf("publish home assistant sensor discovery: %w", err)
+	}
+
+	return nil
 }
 
 func (o *Publisher) clearRetained(ctx context.Context, client *Client, topic string) error {
@@ -168,3 +287,4 @@ func sanitizeTopicSegment(value string) string {
 	}
 	return sanitized
 }
+

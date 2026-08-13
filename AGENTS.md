@@ -118,6 +118,8 @@ Current contract shape:
 - `up2date/<node_id>/<service_name>/observed_at`
 - `up2date/<node_id>/<service_name>/check_status`
 
+When Home Assistant discovery is enabled, retained discovery config payloads are published to `<discovery_prefix>/update/<node_id>_<service_name>/config` and `<discovery_prefix>/sensor/<node_id>_<service_name>_check_status/config` pointing Home Assistant to these core `up2date` topics.
+
 Guidance for MQTT changes:
 
 - prefer a few stable fields over broad payloads

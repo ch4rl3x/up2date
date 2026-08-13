@@ -133,6 +133,31 @@ func Load() (Config, error) {
 		if err != nil {
 			return Config{}, err
 		}
+		haEnabled, err := loadOptionalBool("UP2DATE_PUBLISHER_MQTT_HOMEASSISTANT_ENABLED")
+		if err != nil {
+			return Config{}, err
+		}
+		if haEnabled == nil {
+			// Also check shorter alias UP2DATE_PUBLISHER_MQTT_HOMEASSISTANT
+			haEnabled, err = loadOptionalBool("UP2DATE_PUBLISHER_MQTT_HOMEASSISTANT")
+			if err != nil {
+				return Config{}, err
+			}
+		}
+
+		haDiscoveryPrefix := strings.TrimSpace(os.Getenv("UP2DATE_PUBLISHER_MQTT_HOMEASSISTANT_DISCOVERY_PREFIX"))
+
+		var haCfg *mqttpublisher.HomeAssistantConfig
+		if (haEnabled != nil && *haEnabled) || haDiscoveryPrefix != "" {
+			enabled := false
+			if haEnabled != nil {
+				enabled = *haEnabled
+			}
+			haCfg = &mqttpublisher.HomeAssistantConfig{
+				Enabled:         enabled,
+				DiscoveryPrefix: haDiscoveryPrefix,
+			}
+		}
 
 		cfg.Job.Publisher.MQTT = mqttpublisher.Config{
 			Host:           strings.TrimSpace(os.Getenv("UP2DATE_PUBLISHER_MQTT_HOST")),
@@ -143,6 +168,7 @@ func Load() (Config, error) {
 			ClientIDPrefix: strings.TrimSpace(os.Getenv("UP2DATE_PUBLISHER_MQTT_CLIENT_ID_PREFIX")),
 			ConnectTimeout: strings.TrimSpace(os.Getenv("UP2DATE_PUBLISHER_MQTT_CONNECT_TIMEOUT")),
 			Retain:         retain,
+			HomeAssistant:  haCfg,
 		}
 	default:
 		return Config{}, fmt.Errorf("unsupported publisher type %q", publisherType)
