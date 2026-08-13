@@ -32,3 +32,24 @@ func TestPublishedFieldsIncludeIdentityNames(t *testing.T) {
 		t.Fatalf("unexpected published fields: %#v", got)
 	}
 }
+
+func TestPublisherNewHomeAssistantConfig(t *testing.T) {
+	pub, err := New(Config{
+		Host: "127.0.0.1",
+		HomeAssistant: &HomeAssistantConfig{
+			Enabled:         true,
+			DiscoveryPrefix: "homeassistant_custom",
+		},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	if !pub.haEnabled {
+		t.Fatalf("haEnabled = false, want true")
+	}
+	if pub.haDiscoveryPrefix != "homeassistant_custom" {
+		t.Fatalf("haDiscoveryPrefix = %q, want homeassistant_custom", pub.haDiscoveryPrefix)
+	}
+}
+

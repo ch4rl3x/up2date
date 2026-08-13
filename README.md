@@ -166,6 +166,8 @@ Publisher `mqtt`:
 - `UP2DATE_PUBLISHER_MQTT_CLIENT_ID_PREFIX`
 - `UP2DATE_PUBLISHER_MQTT_CONNECT_TIMEOUT`
 - `UP2DATE_PUBLISHER_MQTT_RETAIN`
+- `UP2DATE_PUBLISHER_MQTT_HOMEASSISTANT_ENABLED` optional (`true`/`false`, aktiviert Home Assistant Discovery)
+- `UP2DATE_PUBLISHER_MQTT_HOMEASSISTANT_DISCOVERY_PREFIX` optional, Default `homeassistant`
 
 ## MQTT
 
@@ -188,6 +190,27 @@ up2date/docker-host-01/nginx/latest_version_url = https://hub.docker.com/_/nginx
 up2date/docker-host-01/nginx/observed_at = 2026-03-27T20:44:59Z
 up2date/docker-host-01/nginx/check_status = outdated
 ```
+
+### Home Assistant Discovery
+
+Wenn Home Assistant Discovery aktiviert ist (`UP2DATE_PUBLISHER_MQTT_HOMEASSISTANT_ENABLED=true` oder in der Config-Datei unter `publisher.mqtt.homeassistant: true`), veröffentlicht `up2date` zusätzlich retained Configuration-Payloads im Home Assistant MQTT Discovery-Format:
+
+- Update-Entität: `<discovery_prefix>/update/<node_id>_<service_name>/config`
+- Check-Status-Sensor: `<discovery_prefix>/sensor/<node_id>_<service_name>_check_status/config`
+
+In Home Assistant werden dadurch automatisch alle Dienste eines Nodes unter einem gemeinsamen Device (`Node <node_id>`) angelegt. Die Update-Entität nutzt dabei nativ die `current_version`-, `latest_version`- und `latest_version_url`-Topics.
+
+In Config-Dateien (`YAML`/`JSON`):
+
+```yaml
+publisher:
+  mqtt:
+    host: 127.0.0.1
+    homeassistant:
+      enabled: true
+      discovery_prefix: homeassistant
+```
+
 
 ## LXC mit direkt installierter Software
 
