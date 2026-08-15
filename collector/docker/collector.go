@@ -295,6 +295,7 @@ func buildObservation(item container) model.Observation {
 	}
 	if customName := detectCustomName(item.Labels); customName != "" {
 		serviceName = customName
+		artifactName = customName
 	}
 
 	attributes := map[string]string{

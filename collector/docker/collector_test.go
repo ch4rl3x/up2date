@@ -148,6 +148,9 @@ func TestBuildObservationUsesCustomNameLabel(t *testing.T) {
 	if observation.ServiceName != "my-custom-redis" {
 		t.Fatalf("service name = %q, want my-custom-redis", observation.ServiceName)
 	}
+	if observation.ArtifactName != "my-custom-redis" {
+		t.Fatalf("artifact name = %q, want my-custom-redis", observation.ArtifactName)
+	}
 }
 
 func TestShouldExcludeContainersWithWatchFalseOrIgnoreTrue(t *testing.T) {
