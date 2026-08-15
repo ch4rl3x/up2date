@@ -90,7 +90,7 @@ func Load() (Config, error) {
 		if err != nil {
 			return Config{}, err
 		}
-		excludeSelf, err := loadOptionalBool("UP2DATE_COLLECTOR_DOCKER_EXCLUDE_SELF")
+		watchByDefault, err := loadOptionalBool("UP2DATE_COLLECTOR_DOCKER_WATCH_BY_DEFAULT")
 		if err != nil {
 			return Config{}, err
 		}
@@ -98,8 +98,7 @@ func Load() (Config, error) {
 		cfg.Job.Collector.Docker = dockercollector.Config{
 			Endpoint:       strings.TrimSpace(os.Getenv("UP2DATE_COLLECTOR_DOCKER_ENDPOINT")),
 			IncludeStopped: includeStopped,
-			ExcludeSelf:    excludeSelf,
-			ExcludeLabels:  loadOptionalCSV("UP2DATE_COLLECTOR_DOCKER_EXCLUDE_LABELS"),
+			WatchByDefault: watchByDefault,
 		}
 	case "package":
 		cfg.Job.Collector.Package = ospackagecollector.Config{

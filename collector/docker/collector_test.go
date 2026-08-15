@@ -134,6 +134,109 @@ func TestBuildObservationKeepsVersionedTagWhenImageAlsoHasDigest(t *testing.T) {
 	}
 }
 
+func TestBuildObservationUsesCustomNameLabel(t *testing.T) {
+	observation := buildObservation(container{
+		ID:     "1234567890abcdef",
+		Names:  []string{"/random-container-name"},
+		Image:  "docker.io/library/redis:7-alpine",
+		Status: "Up 10 minutes",
+		Labels: map[string]string{
+			"up2date.name": "my-custom-redis",
+		},
+	})
+
+	if observation.ServiceName != "my-custom-redis" {
+		t.Fatalf("service name = %q, want my-custom-redis", observation.ServiceName)
+	}
+}
+
+func TestShouldExcludeContainersWithWatchFalseOrIgnoreTrue(t *testing.T) {
+	c, err := New(Config{})
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		labels   map[string]string
+		excluded bool
+	}{
+		{
+			name:     "no labels",
+			labels:   nil,
+			excluded: false,
+		},
+		{
+			name:     "up2date.watch=true",
+			labels:   map[string]string{"up2date.watch": "true"},
+			excluded: false,
+		},
+		{
+			name:     "up2date.watch=false",
+			labels:   map[string]string{"up2date.watch": "false"},
+			excluded: true,
+		},
+		{
+			name:     "up2date.ignore=true",
+			labels:   map[string]string{"up2date.ignore": "true"},
+			excluded: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := c.shouldExclude(container{Labels: tc.labels})
+			if got != tc.excluded {
+				t.Fatalf("shouldExclude() = %v, want %v", got, tc.excluded)
+			}
+		})
+	}
+}
+
+func TestShouldExcludeWhenWatchByDefaultIsFalse(t *testing.T) {
+	watchByDefault := false
+	c, err := New(Config{WatchByDefault: &watchByDefault})
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		labels   map[string]string
+		excluded bool
+	}{
+		{
+			name:     "no labels",
+			labels:   nil,
+			excluded: true,
+		},
+		{
+			name:     "up2date.watch=false",
+			labels:   map[string]string{"up2date.watch": "false"},
+			excluded: true,
+		},
+		{
+			name:     "up2date.watch=true",
+			labels:   map[string]string{"up2date.watch": "true"},
+			excluded: false,
+		},
+		{
+			name:     "up2date.enable=true",
+			labels:   map[string]string{"up2date.enable": "true"},
+			excluded: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := c.shouldExclude(container{Labels: tc.labels})
+			if got != tc.excluded {
+				t.Fatalf("shouldExclude() = %v, want %v", got, tc.excluded)
+			}
+		})
+	}
+}
+
 func TestNewRejectsUnsupportedEndpointScheme(t *testing.T) {
 	_, err := New(Config{Endpoint: "ssh://dockerproxy:22"})
 	if err == nil {
@@ -143,3 +246,5 @@ func TestNewRejectsUnsupportedEndpointScheme(t *testing.T) {
 		t.Fatalf("error = %q, want unsupported scheme", err)
 	}
 }
+
+

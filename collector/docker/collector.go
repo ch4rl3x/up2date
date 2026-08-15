@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,13 +25,16 @@ const (
 
 var (
 	defaultExcludeLabels = []string{
+		"up2date.watch=false",
+		"up2date.enable=false",
 		"up2date.ignore=true",
-		"com.up2date.ignore=true",
 	}
-	selfContainerIDPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`libpod-([a-f0-9]{12,64})(?:\.scope)?`),
-		regexp.MustCompile(`docker-([a-f0-9]{12,64})(?:\.scope)?`),
-		regexp.MustCompile(`/containers/([a-f0-9]{12,64})/`),
+	defaultIncludeLabels = []string{
+		"up2date.watch=true",
+		"up2date.enable=true",
+	}
+	customNameLabelKeys = []string{
+		"up2date.name",
 	}
 	versionLabelKeys = []string{
 		"org.opencontainers.image.version",
@@ -42,10 +44,9 @@ var (
 )
 
 type Config struct {
-	Endpoint       string   `json:"endpoint,omitempty"`
-	IncludeStopped *bool    `json:"include_stopped,omitempty"`
-	ExcludeSelf    *bool    `json:"exclude_self,omitempty"`
-	ExcludeLabels  []string `json:"exclude_labels,omitempty"`
+	Endpoint       string `json:"endpoint,omitempty"`
+	IncludeStopped *bool  `json:"include_stopped,omitempty"`
+	WatchByDefault *bool  `json:"watch_by_default,omitempty"`
 }
 
 type Collector struct {
@@ -53,8 +54,7 @@ type Collector struct {
 	endpointScheme string
 	baseURL        string
 	includeStopped bool
-	excludeSelf    bool
-	excludeLabels  []string
+	watchByDefault bool
 	client         *http.Client
 }
 
@@ -80,14 +80,9 @@ func New(cfg Config) (*Collector, error) {
 		includeStopped = *cfg.IncludeStopped
 	}
 
-	excludeSelf := true
-	if cfg.ExcludeSelf != nil {
-		excludeSelf = *cfg.ExcludeSelf
-	}
-
-	excludeLabels := append([]string(nil), cfg.ExcludeLabels...)
-	if len(excludeLabels) == 0 {
-		excludeLabels = append(excludeLabels, defaultExcludeLabels...)
+	watchByDefault := true
+	if cfg.WatchByDefault != nil {
+		watchByDefault = *cfg.WatchByDefault
 	}
 
 	endpoint, err := resolveEndpoint(cfg.Endpoint)
@@ -109,8 +104,7 @@ func New(cfg Config) (*Collector, error) {
 		endpointScheme: endpoint.scheme,
 		baseURL:        endpoint.baseURL,
 		includeStopped: includeStopped,
-		excludeSelf:    excludeSelf,
-		excludeLabels:  excludeLabels,
+		watchByDefault: watchByDefault,
 		client: &http.Client{
 			Transport: transport,
 			Timeout:   10 * time.Second,
@@ -124,14 +118,9 @@ func (i *Collector) Collect(ctx context.Context, node model.Node, jobName string
 		return model.Snapshot{}, err
 	}
 
-	selfMatchers := []string(nil)
-	if i.excludeSelf {
-		selfMatchers = detectSelfMatchers()
-	}
-
 	observations := make([]model.Observation, 0, len(containers))
 	for _, item := range containers {
-		if shouldExclude(item, selfMatchers, i.excludeLabels) {
+		if i.shouldExclude(item) {
 			continue
 		}
 		observations = append(observations, buildObservation(item))
@@ -304,6 +293,9 @@ func buildObservation(item container) model.Observation {
 	if serviceName == "" {
 		serviceName = containerName
 	}
+	if customName := detectCustomName(item.Labels); customName != "" {
+		serviceName = customName
+	}
 
 	attributes := map[string]string{
 		"container_id":   shortContainerID(item.ID),
@@ -335,114 +327,31 @@ func buildObservation(item container) model.Observation {
 	}
 }
 
-func shouldExclude(item container, selfMatchers []string, selectors []string) bool {
-	if matchesSelf(item, selfMatchers) {
-		return true
-	}
-
-	for _, selector := range selectors {
-		if matchesLabelSelector(item.Labels, selector) {
-			return true
-		}
-	}
-	return false
-}
-
-func matchesSelf(item container, selfMatchers []string) bool {
-	if len(selfMatchers) == 0 {
-		return false
-	}
-
-	containerName := normalizeSelfMatcher(firstContainerName(item))
-	shortID := normalizeSelfMatcher(shortContainerID(item.ID))
-	fullID := normalizeSelfMatcher(item.ID)
-
-	for _, matcher := range selfMatchers {
-		if matcher == "" {
-			continue
-		}
-		if matcher == fullID || matcher == shortID || strings.HasPrefix(fullID, matcher) {
-			return true
-		}
-		if matcher == containerName {
-			return true
-		}
-	}
-
-	return false
-}
-
-func detectSelfMatchers() []string {
-	seen := make(map[string]struct{})
-
-	add := func(value string) {
-		value = normalizeSelfMatcher(value)
-		if value == "" {
-			return
-		}
-
-		seen[value] = struct{}{}
-		if dot := strings.IndexByte(value, '.'); dot > 0 {
-			seen[value[:dot]] = struct{}{}
-		}
-		if looksLikeContainerID(value) && len(value) > 12 {
-			seen[value[:12]] = struct{}{}
-		}
-	}
-
-	add(os.Getenv("HOSTNAME"))
-	if hostname, err := os.Hostname(); err == nil {
-		add(hostname)
-	}
-	add(detectSelfContainerID("/proc/self/cgroup"))
-	add(detectSelfContainerID("/proc/self/mountinfo"))
-
-	matchers := make([]string, 0, len(seen))
-	for value := range seen {
-		matchers = append(matchers, value)
-	}
-	sort.Strings(matchers)
-	return matchers
-}
-
-func detectSelfContainerID(path string) string {
-	file, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		for _, pattern := range selfContainerIDPatterns {
-			matches := pattern.FindStringSubmatch(line)
-			if len(matches) == 2 {
-				return matches[1]
+func (i *Collector) shouldExclude(item container) bool {
+	if i.watchByDefault {
+		for _, selector := range defaultExcludeLabels {
+			if matchesLabelSelector(item.Labels, selector) {
+				return true
 			}
 		}
-	}
-
-	return ""
-}
-
-func normalizeSelfMatcher(value string) string {
-	value = strings.TrimSpace(value)
-	value = strings.TrimPrefix(value, "/")
-	return strings.ToLower(value)
-}
-
-func looksLikeContainerID(value string) bool {
-	if len(value) < 12 {
 		return false
 	}
 
-	for _, char := range value {
-		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+	for _, selector := range defaultIncludeLabels {
+		if matchesLabelSelector(item.Labels, selector) {
 			return false
 		}
 	}
 	return true
+}
+
+func detectCustomName(labels map[string]string) string {
+	for _, key := range customNameLabelKeys {
+		if value := strings.TrimSpace(labels[key]); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func matchesLabelSelector(labels map[string]string, selector string) bool {

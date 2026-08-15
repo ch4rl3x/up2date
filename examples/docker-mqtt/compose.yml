@@ -1,6 +1,8 @@
 services:
   app:
     image: docker.io/library/nginx:1.27-alpine
+    labels:
+      up2date.name: "web-frontend"
     restart: unless-stopped
 
   mqtt:
@@ -8,7 +10,7 @@ services:
     ports:
       - "1883:1883"
     labels:
-      up2date.ignore: "true"
+      up2date.watch: "false"
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     restart: unless-stopped

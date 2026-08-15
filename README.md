@@ -147,8 +147,8 @@ Resolver:
 Collector `docker`:
 - `UP2DATE_COLLECTOR_DOCKER_ENDPOINT` optional, z. B. `unix:///var/run/docker.sock` oder `tcp://dockerproxy:2375`
 - `UP2DATE_COLLECTOR_DOCKER_INCLUDE_STOPPED`
-- `UP2DATE_COLLECTOR_DOCKER_EXCLUDE_SELF`
-- `UP2DATE_COLLECTOR_DOCKER_EXCLUDE_LABELS`
+- `UP2DATE_COLLECTOR_DOCKER_WATCH_BY_DEFAULT` optional (`true`/`false`, Default `true`). Bei `false` werden nur Container mit `up2date.watch=true` beobachtet.
+- Docker-Container-Labels: `up2date.watch=true`/`false` (Ein-/Ausschluss), `up2date.name=CUSTOM_NAME` (eigener Servicename)
 
 Collector `package`:
 - `UP2DATE_COLLECTOR_PACKAGE_MANAGER` optional, Default `dpkg`, aktuell `dpkg` oder `brew`
@@ -299,9 +299,9 @@ Fuer Dauerlauf statt One-Shot:
 ./examples/package-brew-mqtt/run.sh --continuous
 ```
 
-## Hinweise
-
-- Das Label `up2date.ignore=true` ist optional. Der Docker-Collector schliesst sich standardmaessig selbst aus.
+- Der Docker-Collector scannt standardmaessig auch den eigenen `up2date`-Container mit.
+- Mit den Docker-Labels `up2date.watch=false` (oder `up2date.ignore=true`) kannst du bestimmte Container vom Scan ausschliessen. Wenn `UP2DATE_COLLECTOR_DOCKER_WATCH_BY_DEFAULT=false` gesetzt ist (Opt-In-Modus), werden stattdessen nur Container mit `up2date.watch=true` gescannt.
+- Mit dem Label `up2date.name=CUSTOM_NAME` kannst du einen individuellen Servicenamen fuer das MQTT-Topic und Home Assistant setzen.
 - Ohne `UP2DATE_COLLECTOR_DOCKER_ENDPOINT` nutzt der Docker-Collector den Unix-Socket `/var/run/docker.sock`.
 - Fuer Podman kannst du entweder wie bisher den Socket des Container-Hosts auf `/var/run/docker.sock` in den Container mounten oder direkt einen Unix-Endpoint wie `unix:///run/podman/podman.sock` konfigurieren.
 - Fuer einen lokalen Socket-Proxy kannst du statt des direkten Socket-Mounts einen TCP-Endpoint wie `tcp://dockerproxy:2375` setzen.
